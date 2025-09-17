@@ -148,6 +148,56 @@ async def list_tools() -> list[Tool]:
                 "required": ["content", "reply_to_tweet_id"],
             },
         ),
+        Tool(
+            name="retweet",
+            description="Retweet an existing tweet (simple retweet without comment)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tweet_id": {
+                        "type": "string",
+                        "description": "The ID of the tweet to retweet",
+                    },
+                },
+                "required": ["tweet_id"],
+            },
+        ),
+        Tool(
+            name="quote_tweet",
+            description="Quote tweet with comment (retweet with your own comment)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tweet_id": {
+                        "type": "string",
+                        "description": "The ID of the tweet to quote",
+                    },
+                    "comment": {
+                        "type": "string",
+                        "description": "Your comment on the quoted tweet",
+                    },
+                },
+                "required": ["tweet_id", "comment"],
+            },
+        ),
+        Tool(
+            name="create_draft_quote_tweet",
+            description="Create a draft quote tweet with comment",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tweet_id": {
+                        "type": "string",
+                        "description": "The ID of the tweet to quote",
+                    },
+                    "comment": {
+                        "type": "string",
+                        "description": "Your comment on the quoted tweet",
+                    },
+                },
+                "required": ["tweet_id", "comment"],
+            },
+        ),
     ]
 
 @server.call_tool()
@@ -167,6 +217,12 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
         return await handle_create_draft_reply(arguments)
     elif name == "reply_to_tweet":
         return await handle_reply_to_tweet(arguments)
+    elif name == "retweet":
+        return await handle_retweet(arguments)
+    elif name == "quote_tweet":
+        return await handle_quote_tweet(arguments)
+    elif name == "create_draft_quote_tweet":
+        return await handle_create_draft_quote_tweet(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -289,6 +345,23 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
                         text=f"Draft {draft_id} published as tweet ID {tweet_id}",
                     )
                 ]
+        elif "comment" in draft and draft.get("type") == "quote_tweet":
+            # Quote tweet draft
+            comment = draft["comment"]
+            quote_tweet_id = draft["quote_tweet_id"]
+            
+            response = client.create_tweet(text=comment, quote_tweet_id=quote_tweet_id)
+            tweet_id = response.data['id']
+            logger.info(f"Published quote tweet ID {tweet_id} quoting tweet {quote_tweet_id}")
+            
+            # Only delete the draft after successful publishing
+            os.remove(filepath)
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Draft {draft_id} published as quote tweet ID {tweet_id} quoting tweet {quote_tweet_id}",
+                )
+            ]
         elif "contents" in draft:
             # Thread
             contents = draft["contents"]
@@ -422,6 +495,95 @@ async def handle_reply_to_tweet(arguments: Any) -> Sequence[TextContent]:
     except Exception as e:
         logger.error(f"Error replying to tweet {reply_to_tweet_id}: {str(e)}")
         raise RuntimeError(f"Error replying to tweet {reply_to_tweet_id}: {str(e)}")
+
+async def handle_retweet(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "tweet_id" not in arguments:
+        raise ValueError("Invalid arguments for retweet")
+    
+    tweet_id = arguments["tweet_id"]
+    
+    try:
+        # Simple retweet without comment using the retweet method
+        response = client.retweet(tweet_id)
+        
+        logger.info(f"Retweeted tweet {tweet_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Successfully retweeted tweet {tweet_id}",
+            )
+        ]
+    except tweepy.TweepError as e:
+        logger.error(f"Twitter API error retweeting tweet {tweet_id}: {e}")
+        raise RuntimeError(f"Twitter API error retweeting tweet {tweet_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error retweeting tweet {tweet_id}: {str(e)}")
+        raise RuntimeError(f"Error retweeting tweet {tweet_id}: {str(e)}")
+
+async def handle_quote_tweet(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "tweet_id" not in arguments or "comment" not in arguments:
+        raise ValueError("Invalid arguments for quote_tweet")
+    
+    tweet_id = arguments["tweet_id"]
+    comment = arguments["comment"]
+    
+    try:
+        # Quote tweet with comment
+        response = client.create_tweet(text=comment, quote_tweet_id=tweet_id)
+        quote_tweet_id = response.data['id']
+        
+        logger.info(f"Quote tweeted tweet {tweet_id} with comment. Quote tweet ID: {quote_tweet_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Successfully quote tweeted tweet {tweet_id} with comment. Quote tweet ID: {quote_tweet_id}",
+            )
+        ]
+    except tweepy.TweepError as e:
+        logger.error(f"Twitter API error quote tweeting tweet {tweet_id}: {e}")
+        raise RuntimeError(f"Twitter API error quote tweeting tweet {tweet_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error quote tweeting tweet {tweet_id}: {str(e)}")
+        raise RuntimeError(f"Error quote tweeting tweet {tweet_id}: {str(e)}")
+
+async def handle_create_draft_quote_tweet(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "tweet_id" not in arguments or "comment" not in arguments:
+        raise ValueError("Invalid arguments for create_draft_quote_tweet")
+    
+    tweet_id = arguments["tweet_id"]
+    comment = arguments["comment"]
+    
+    try:
+        # Create a draft quote tweet
+        draft = {
+            "comment": comment,
+            "quote_tweet_id": tweet_id,
+            "timestamp": datetime.now().isoformat(),
+            "type": "quote_tweet"
+        }
+        
+        # Ensure drafts directory exists
+        os.makedirs("drafts", exist_ok=True)
+        
+        # Save the draft to a file
+        draft_id = f"quote_draft_{int(datetime.now().timestamp())}.json"
+        with open(os.path.join("drafts", draft_id), "w") as f:
+            json.dump(draft, f, indent=2)
+        
+        logger.info(f"Draft quote tweet created: {draft_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Draft quote tweet created with ID {draft_id} (quoting tweet {tweet_id})",
+            )
+        ]
+    except Exception as e:
+        logger.error(f"Error creating draft quote tweet: {str(e)}")
+        raise RuntimeError(f"Error creating draft quote tweet: {str(e)}")
+
 # Implement the main function
 async def main():
     import mcp

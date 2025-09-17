@@ -4,7 +4,7 @@
 
 [English](README.md) | **中文**
 
-一个通过 Claude Desktop 和 Gemini CLI 聊天直接创建、管理和发布 X/Twitter 帖子的 MCP 服务器。
+一个通过 Claude code 和 Gemini CLI 聊天直接创建、管理和发布 X/Twitter 帖子的 MCP 服务器。
 
 > **说明：** 本项目修改自 [vidhupv/x-mcp](https://github.com/vidhupv/x-mcp)，增加了回复推文的功能。
 
@@ -16,6 +16,9 @@
 - ✅ 列出所有草稿
 - ✅ 发布草稿（推文、推文串和回复）
 - ✅ 直接回复推文（无需创建草稿）
+- ✅ 转发现有推文
+- ✅ 带评论的引用转发
+- ✅ 创建引用转发草稿
 - ✅ 删除草稿
 - ✅ 发布失败时保留草稿
 
@@ -27,13 +30,13 @@
 
 ### 通过 Smithery 安装
 
-通过 [Smithery](https://smithery.ai/server/x-mcp) 自动为 Claude Desktop 安装 X(Twitter) MCP 服务器：
+通过 [Smithery](https://smithery.ai/server/x-mcp) 自动为 Claude code 安装 X(Twitter) MCP 服务器：
 
 ```bash
 npx -y @smithery/cli install x-mcp --client claude
 ```
 
-### Claude Desktop 手动安装
+### Claude code 手动安装
 
 1. **克隆仓库：**
 ```bash
@@ -87,15 +90,15 @@ brew install uv
 
 ### Gemini CLI 配置
 
-如果您想在 Gemini CLI 中使用此 MCP 服务器而不是 Claude Desktop：
+如果您想在 Gemini CLI 中使用此 MCP 服务器而不是 Claude code：
 
 1. **安装 Gemini CLI：**
 ```bash
-npm install -g @google/generative-ai-cli
+npm install -g @google/gemini-cli
 ```
 
 2. **创建或更新您的 MCP 配置文件：**
-   - 在项目目录中创建名为 `mcp-config.json` 的文件
+   - 创建名为 `~/.gemini/settings.json` 的文件
    - 添加以下配置：
 
 ```json
@@ -122,7 +125,7 @@ npm install -g @google/generative-ai-cli
 
 3. **启动支持 MCP 的 Gemini CLI：**
 ```bash
-gemini-cli --mcp-config mcp-config.json
+重新启动gemini cli
 ```
 
 4. **更新配置文件：**
@@ -131,7 +134,7 @@ gemini-cli --mcp-config mcp-config.json
 
 ## 使用示例
 
-适用于 Claude Desktop 和 Gemini CLI：
+适用于 Claude code 和 Gemini CLI：
 
 * "发推文'刚学会通过AI发推文 - 太震撼了！🤖✨'"
 * "创建一个关于披萨历史的推文串"
@@ -140,6 +143,9 @@ gemini-cli --mcp-config mcp-config.json
 * "删除那个草稿"
 * "回复推文 1234567890，说'很棒的观点！感谢分享。'"
 * "为推文 1234567890 创建回复草稿，内容是'我完全同意这个观点。'"
+* "转发推文 1234567890"
+* "引用转发推文 1234567890，评论'这正是我想说的！'"
+* "为推文 1234567890 创建引用转发草稿，评论'这里有很棒的见解'"
 
 ## 高级功能
 
@@ -160,7 +166,7 @@ gemini-cli --mcp-config mcp-config.json
 
 ## 技术特性
 
-- **基于 MCP 协议** - 与 Claude 无缝集成
+- **基于 MCP 协议** - 与 Claude code 无缝集成
 - **异步处理** - 支持高效的并发操作
 - **本地草稿存储** - 安全的本地文件系统存储
 - **完整的日志记录** - 详细的操作日志和调试信息
@@ -192,7 +198,8 @@ gemini-cli --mcp-config mcp-config.json
 
 ### 本分支的新增功能
 - ✅ **回复推文功能** - 创建回复草稿和直接回复现有推文
-- ✅ **增强的草稿管理** - 改进了发布失败时的草稿保留机制
+- ✅ **转发推文功能** - 简单转发和带评论的引用转发
+- ✅ **增强的草稿管理** - 改进了发布失败时的草稿保留机制，支持引用转发草稿
 - ✅ **更好的错误处理** - 更详细的错误信息和恢复选项
 
 特别感谢原作者为创建这个 MCP 服务器奠定了基础！

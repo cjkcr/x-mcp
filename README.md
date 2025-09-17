@@ -4,7 +4,7 @@
 
 **English** | [中文](README_CN.md)
 
-An MCP server to create, manage and publish X/Twitter posts directly through Claude Desktop and Gemini CLI chat.
+An MCP server to create, manage and publish X/Twitter posts directly through Claude code and Gemini CLI chat.
 
 > **Note:** This project is modified from [vidhupv/x-mcp](https://github.com/vidhupv/x-mcp), with added reply functionality for tweets.
 
@@ -16,6 +16,9 @@ An MCP server to create, manage and publish X/Twitter posts directly through Cla
 - ✅ List all drafts
 - ✅ Publish drafts (tweets, threads, and replies)
 - ✅ Reply to tweets directly (without creating drafts)
+- ✅ Retweet existing tweets
+- ✅ Quote tweet with comments
+- ✅ Create draft quote tweets
 - ✅ Delete drafts
 - ✅ Draft preservation on publish failure
 
@@ -27,13 +30,13 @@ An MCP server to create, manage and publish X/Twitter posts directly through Cla
 
 ### Installing via Smithery
 
-To install X(Twitter) MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/x-mcp):
+To install X(Twitter) MCP Server for Claude code automatically via [Smithery](https://smithery.ai/server/x-mcp):
 
 ```bash
 npx -y @smithery/cli install x-mcp --client claude
 ```
 
-### Manual Installation for Claude Desktop
+### Manual Installation for Claude code
 
 1. **Clone the repository:**
 ```bash
@@ -87,7 +90,7 @@ brew install uv
 
 ### Configuration for Gemini CLI
 
-If you want to use this MCP server with Gemini CLI instead of Claude Desktop:
+If you want to use this MCP server with Gemini CLI instead of Claude code:
 
 1. **Install Gemini CLI:**
 ```bash
@@ -131,7 +134,7 @@ Restart gemini cli
 
 ## Usage Examples
 
-Works with both Claude Desktop and Gemini CLI:
+Works with both Claude code and Gemini CLI:
 
 * "Tweet 'Just learned how to tweet through AI - mind blown! 🤖✨'"
 * "Create a thread about the history of pizza"
@@ -140,6 +143,9 @@ Works with both Claude Desktop and Gemini CLI:
 * "Delete that draft"
 * "Reply to tweet 1234567890 with 'Great point! Thanks for sharing.'"
 * "Create a draft reply to tweet 1234567890 saying 'I completely agree with this perspective.'"
+* "Retweet tweet 1234567890"
+* "Quote tweet 1234567890 with comment 'This is exactly what I was thinking!'"
+* "Create a draft quote tweet for 1234567890 with comment 'Amazing insight here'"
 
 ## Troubleshooting
 
@@ -155,7 +161,8 @@ This project is based on the excellent work by [Vidhu Panhavoor Vasudevan](https
 
 ### What's New in This Fork
 - ✅ **Reply to tweets functionality** - Create draft replies and reply directly to existing tweets
-- ✅ **Enhanced draft management** - Improved draft preservation on publish failure
+- ✅ **Retweet functionality** - Simple retweets and quote tweets with comments
+- ✅ **Enhanced draft management** - Improved draft preservation on publish failure, support for quote tweet drafts
 - ✅ **Better error handling** - More detailed error messages and recovery options
 
 Special thanks to the original author for creating the foundation of this MCP server!
