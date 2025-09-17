@@ -4,7 +4,7 @@
 
 **English** | [中文](README_CN.md)
 
-An MCP server to create, manage and publish X/Twitter posts directly through Claude chat.
+An MCP server to create, manage and publish X/Twitter posts directly through Claude Desktop and Gemini CLI chat.
 
 > **Note:** This project is modified from [vidhupv/x-mcp](https://github.com/vidhupv/x-mcp), with added reply functionality for tweets.
 
@@ -33,7 +33,7 @@ To install X(Twitter) MCP Server for Claude Desktop automatically via [Smithery]
 npx -y @smithery/cli install x-mcp --client claude
 ```
 
-### Manual Installation
+### Manual Installation for Claude Desktop
 
 1. **Clone the repository:**
 ```bash
@@ -85,7 +85,53 @@ brew install uv
 
 7. **Quit Claude completely and reopen it**
 
+### Configuration for Gemini CLI
+
+If you want to use this MCP server with Gemini CLI instead of Claude Desktop:
+
+1. **Install Gemini CLI:**
+```bash
+npm install -g @google/gemini-cli
+```
+
+2. **Create or update your MCP configuration file:**
+   - Create a file named `~/.gemini/settings.json`
+   - Add the following configuration:
+
+```json
+{
+  "mcpServers": {
+    "x_mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/x-mcp",
+        "run",
+        "x-mcp"
+      ],
+      "env": {
+        "TWITTER_API_KEY": "your_api_key",
+        "TWITTER_API_SECRET": "your_api_secret",
+        "TWITTER_ACCESS_TOKEN": "your_access_token",
+        "TWITTER_ACCESS_TOKEN_SECRET": "your_access_token_secret"
+      }
+    }
+  }
+}
+```
+
+3. **Start Gemini CLI with MCP support:**
+```bash
+Restart gemini cli
+```
+
+4. **Update the config file:**
+   - Replace `/path/to/x-mcp` with your actual repository path
+   - Add your X/Twitter API credentials
+
 ## Usage Examples
+
+Works with both Claude Desktop and Gemini CLI:
 
 * "Tweet 'Just learned how to tweet through AI - mind blown! 🤖✨'"
 * "Create a thread about the history of pizza"

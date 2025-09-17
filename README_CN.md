@@ -4,7 +4,7 @@
 
 [English](README.md) | **中文**
 
-一个通过 Claude 聊天直接创建、管理和发布 X/Twitter 帖子的 MCP 服务器。
+一个通过 Claude Desktop 和 Gemini CLI 聊天直接创建、管理和发布 X/Twitter 帖子的 MCP 服务器。
 
 > **说明：** 本项目修改自 [vidhupv/x-mcp](https://github.com/vidhupv/x-mcp)，增加了回复推文的功能。
 
@@ -33,7 +33,7 @@
 npx -y @smithery/cli install x-mcp --client claude
 ```
 
-### 手动安装
+### Claude Desktop 手动安装
 
 1. **克隆仓库：**
 ```bash
@@ -85,7 +85,53 @@ brew install uv
 
 7. **完全退出 Claude 并重新打开**
 
+### Gemini CLI 配置
+
+如果您想在 Gemini CLI 中使用此 MCP 服务器而不是 Claude Desktop：
+
+1. **安装 Gemini CLI：**
+```bash
+npm install -g @google/generative-ai-cli
+```
+
+2. **创建或更新您的 MCP 配置文件：**
+   - 在项目目录中创建名为 `mcp-config.json` 的文件
+   - 添加以下配置：
+
+```json
+{
+  "mcpServers": {
+    "x_mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/x-mcp",
+        "run",
+        "x-mcp"
+      ],
+      "env": {
+        "TWITTER_API_KEY": "your_api_key",
+        "TWITTER_API_SECRET": "your_api_secret",
+        "TWITTER_ACCESS_TOKEN": "your_access_token",
+        "TWITTER_ACCESS_TOKEN_SECRET": "your_access_token_secret"
+      }
+    }
+  }
+}
+```
+
+3. **启动支持 MCP 的 Gemini CLI：**
+```bash
+gemini-cli --mcp-config mcp-config.json
+```
+
+4. **更新配置文件：**
+   - 将 `/path/to/x-mcp` 替换为您的实际仓库路径
+   - 添加您的 X/Twitter API 凭据
+
 ## 使用示例
+
+适用于 Claude Desktop 和 Gemini CLI：
 
 * "发推文'刚学会通过AI发推文 - 太震撼了！🤖✨'"
 * "创建一个关于披萨历史的推文串"
