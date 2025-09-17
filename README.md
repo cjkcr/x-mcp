@@ -4,6 +4,16 @@
 
 An MCP server to create, manage and publish X/Twitter posts directly through Claude chat.
 
+## Features
+
+- ✅ Create draft tweets
+- ✅ Create draft tweet threads
+- ✅ Create draft replies to existing tweets
+- ✅ List all drafts
+- ✅ Publish drafts (tweets, threads, and replies)
+- ✅ Reply to tweets directly (without creating drafts)
+- ✅ Delete drafts
+
 <a href="https://glama.ai/mcp/servers/jsxr09dktf">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/jsxr09dktf/badge" alt="X(Twitter) Server MCP server" />
 </a>
@@ -76,6 +86,8 @@ brew install uv
 * "Show me my draft tweets"
 * "Publish this draft!"
 * "Delete that draft"
+* "Reply to tweet 1234567890 with 'Great point! Thanks for sharing.'"
+* "Create a draft reply to tweet 1234567890 saying 'I completely agree with this perspective.'"
 
 ## Troubleshooting
 

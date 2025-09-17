@@ -112,6 +112,42 @@ async def list_tools() -> list[Tool]:
                 "required": ["draft_id"],
             },
         ),
+        Tool(
+            name="create_draft_reply",
+            description="Create a draft reply to an existing tweet",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The content of the reply tweet",
+                    },
+                    "reply_to_tweet_id": {
+                        "type": "string",
+                        "description": "The ID of the tweet to reply to",
+                    },
+                },
+                "required": ["content", "reply_to_tweet_id"],
+            },
+        ),
+        Tool(
+            name="reply_to_tweet",
+            description="Reply to an existing tweet directly (without creating a draft)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The content of the reply tweet",
+                    },
+                    "reply_to_tweet_id": {
+                        "type": "string",
+                        "description": "The ID of the tweet to reply to",
+                    },
+                },
+                "required": ["content", "reply_to_tweet_id"],
+            },
+        ),
     ]
 
 @server.call_tool()
@@ -127,6 +163,10 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
         return await handle_publish_draft(arguments)
     elif name == "delete_draft":
         return await handle_delete_draft(arguments)
+    elif name == "create_draft_reply":
+        return await handle_create_draft_reply(arguments)
+    elif name == "reply_to_tweet":
+        return await handle_reply_to_tweet(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -205,52 +245,95 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
     filepath = os.path.join("drafts", draft_id)
     if not os.path.exists(filepath):
         raise ValueError(f"Draft {draft_id} does not exist")
+    
+    # Read the draft first
     try:
         with open(filepath, "r") as f:
             draft = json.load(f)
+    except Exception as e:
+        logger.error(f"Error reading draft {draft_id}: {str(e)}")
+        raise RuntimeError(f"Error reading draft {draft_id}: {str(e)}")
+    
+    # Try to publish the draft
+    try:
         if "content" in draft:
-            # Single tweet
             content = draft["content"]
-            response = client.create_tweet(text=content)
-            tweet_id = response.data['id']
-            logger.info(f"Published tweet ID {tweet_id}")
-            # Delete the draft after publishing
-            os.remove(filepath)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Draft {draft_id} published as tweet ID {tweet_id}",
-                )
-            ]
+            
+            # Check if this is a reply draft
+            if draft.get("type") == "reply" and "reply_to_tweet_id" in draft:
+                # Reply to existing tweet
+                reply_to_tweet_id = draft["reply_to_tweet_id"]
+                response = client.create_tweet(text=content, in_reply_to_tweet_id=reply_to_tweet_id)
+                tweet_id = response.data['id']
+                logger.info(f"Published reply tweet ID {tweet_id} to tweet {reply_to_tweet_id}")
+                
+                # Only delete the draft after successful publishing
+                os.remove(filepath)
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Draft {draft_id} published as reply tweet ID {tweet_id} to tweet {reply_to_tweet_id}",
+                    )
+                ]
+            else:
+                # Single tweet
+                response = client.create_tweet(text=content)
+                tweet_id = response.data['id']
+                logger.info(f"Published tweet ID {tweet_id}")
+                
+                # Only delete the draft after successful publishing
+                os.remove(filepath)
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Draft {draft_id} published as tweet ID {tweet_id}",
+                    )
+                ]
         elif "contents" in draft:
             # Thread
             contents = draft["contents"]
             # Publish the thread
+            published_tweet_ids = []
             last_tweet_id = None
-            for content in contents:
-                if last_tweet_id is None:
-                    response = client.create_tweet(text=content)
+            
+            try:
+                for i, content in enumerate(contents):
+                    if last_tweet_id is None:
+                        response = client.create_tweet(text=content)
+                    else:
+                        response = client.create_tweet(text=content, in_reply_to_tweet_id=last_tweet_id)
+                    last_tweet_id = response.data['id']
+                    published_tweet_ids.append(last_tweet_id)
+                    await asyncio.sleep(1)  # Avoid hitting rate limits
+                
+                logger.info(f"Published thread with {len(published_tweet_ids)} tweets, starting with ID {published_tweet_ids[0]}")
+                
+                # Only delete the draft after successful publishing of entire thread
+                os.remove(filepath)
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Draft {draft_id} published as thread with {len(published_tweet_ids)} tweets, starting with tweet ID {published_tweet_ids[0]}",
+                    )
+                ]
+            except Exception as thread_error:
+                # If thread publishing fails partway through, log which tweets were published
+                if published_tweet_ids:
+                    logger.error(f"Thread publishing failed after {len(published_tweet_ids)} tweets. Published tweet IDs: {published_tweet_ids}")
+                    raise RuntimeError(f"Thread publishing failed after {len(published_tweet_ids)} tweets. Published tweets: {published_tweet_ids}. Error: {thread_error}")
                 else:
-                    response = client.create_tweet(text=content, in_reply_to_tweet_id=last_tweet_id)
-                last_tweet_id = response.data['id']
-                await asyncio.sleep(1)  # Avoid hitting rate limits
-            logger.info(f"Published thread starting with tweet ID {last_tweet_id}")
-            # Delete the draft after publishing
-            os.remove(filepath)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Draft {draft_id} published as thread starting with tweet ID {last_tweet_id}",
-                )
-            ]
+                    raise thread_error
         else:
             raise ValueError(f"Invalid draft format for {draft_id}")
+            
     except tweepy.TweepError as e:
-        logger.error(f"Twitter API error: {e}")
-        raise RuntimeError(f"Error publishing draft {draft_id}: {e}")
+        logger.error(f"Twitter API error publishing draft {draft_id}: {e}")
+        # Draft is NOT deleted on API error - user can retry or fix the issue
+        raise RuntimeError(f"Twitter API error publishing draft {draft_id}: {e}. Draft preserved for retry.")
     except Exception as e:
         logger.error(f"Error publishing draft {draft_id}: {str(e)}")
-        raise RuntimeError(f"Error publishing draft {draft_id}: {str(e)}")
+        # Draft is NOT deleted on other errors - user can retry or fix the issue
+        raise RuntimeError(f"Error publishing draft {draft_id}: {str(e)}. Draft preserved for retry.")
 
 
 async def handle_delete_draft(arguments: Any) -> Sequence[TextContent]:
@@ -276,6 +359,69 @@ async def handle_delete_draft(arguments: Any) -> Sequence[TextContent]:
     except Exception as e:
         logger.error(f"Error deleting draft {draft_id}: {str(e)}")
         raise RuntimeError(f"Error deleting draft {draft_id}: {str(e)}")
+
+async def handle_create_draft_reply(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "content" not in arguments or "reply_to_tweet_id" not in arguments:
+        raise ValueError("Invalid arguments for create_draft_reply")
+    
+    content = arguments["content"]
+    reply_to_tweet_id = arguments["reply_to_tweet_id"]
+    
+    try:
+        # Create a draft reply with the tweet ID to reply to
+        draft = {
+            "content": content,
+            "reply_to_tweet_id": reply_to_tweet_id,
+            "timestamp": datetime.now().isoformat(),
+            "type": "reply"
+        }
+        
+        # Ensure drafts directory exists
+        os.makedirs("drafts", exist_ok=True)
+        
+        # Save the draft to a file
+        draft_id = f"reply_draft_{int(datetime.now().timestamp())}.json"
+        with open(os.path.join("drafts", draft_id), "w") as f:
+            json.dump(draft, f, indent=2)
+        
+        logger.info(f"Draft reply created: {draft_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Draft reply created with ID {draft_id} (replying to tweet {reply_to_tweet_id})",
+            )
+        ]
+    except Exception as e:
+        logger.error(f"Error creating draft reply: {str(e)}")
+        raise RuntimeError(f"Error creating draft reply: {str(e)}")
+
+async def handle_reply_to_tweet(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "content" not in arguments or "reply_to_tweet_id" not in arguments:
+        raise ValueError("Invalid arguments for reply_to_tweet")
+    
+    content = arguments["content"]
+    reply_to_tweet_id = arguments["reply_to_tweet_id"]
+    
+    try:
+        # Reply to the tweet directly
+        response = client.create_tweet(text=content, in_reply_to_tweet_id=reply_to_tweet_id)
+        tweet_id = response.data['id']
+        
+        logger.info(f"Published reply tweet ID {tweet_id} to tweet {reply_to_tweet_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Successfully replied to tweet {reply_to_tweet_id} with tweet ID {tweet_id}",
+            )
+        ]
+    except tweepy.TweepError as e:
+        logger.error(f"Twitter API error: {e}")
+        raise RuntimeError(f"Error replying to tweet {reply_to_tweet_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error replying to tweet {reply_to_tweet_id}: {str(e)}")
+        raise RuntimeError(f"Error replying to tweet {reply_to_tweet_id}: {str(e)}")
 # Implement the main function
 async def main():
     import mcp
