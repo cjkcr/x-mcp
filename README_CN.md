@@ -6,6 +6,8 @@
 
 一个通过 Claude 聊天直接创建、管理和发布 X/Twitter 帖子的 MCP 服务器。
 
+> **说明：** 本项目修改自 [vidhupv/x-mcp](https://github.com/vidhupv/x-mcp)，增加了回复推文的功能。
+
 ## 功能特性
 
 - ✅ 创建推文草稿
@@ -137,3 +139,14 @@ brew install uv
 更多详细的功能说明和使用指南，请参阅：
 - [回复功能详细说明](回复功能说明.md)
 - [REPLY_FUNCTIONALITY.md](REPLY_FUNCTIONALITY.md)（英文版）
+
+## 致谢
+
+本项目基于 [Vidhu Panhavoor Vasudevan](https://github.com/vidhupv) 在原始 [x-mcp](https://github.com/vidhupv/x-mcp) 仓库中的优秀工作。
+
+### 本分支的新增功能
+- ✅ **回复推文功能** - 创建回复草稿和直接回复现有推文
+- ✅ **增强的草稿管理** - 改进了发布失败时的草稿保留机制
+- ✅ **更好的错误处理** - 更详细的错误信息和恢复选项
+
+特别感谢原作者为创建这个 MCP 服务器奠定了基础！

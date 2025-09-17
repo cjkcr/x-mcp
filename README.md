@@ -6,6 +6,8 @@
 
 An MCP server to create, manage and publish X/Twitter posts directly through Claude chat.
 
+> **Note:** This project is modified from [vidhupv/x-mcp](https://github.com/vidhupv/x-mcp), with added reply functionality for tweets.
+
 ## Features
 
 - ✅ Create draft tweets
@@ -100,3 +102,14 @@ If not working:
 - Or find UV path with `which uv` and replace `"command": "uv"` with the full path
 - Verify all X/Twitter credentials are correct
 - Check if the x-mcp path in config matches your actual repository location
+
+## Credits
+
+This project is based on the excellent work by [Vidhu Panhavoor Vasudevan](https://github.com/vidhupv) in the original [x-mcp](https://github.com/vidhupv/x-mcp) repository. 
+
+### What's New in This Fork
+- ✅ **Reply to tweets functionality** - Create draft replies and reply directly to existing tweets
+- ✅ **Enhanced draft management** - Improved draft preservation on publish failure
+- ✅ **Better error handling** - More detailed error messages and recovery options
+
+Special thanks to the original author for creating the foundation of this MCP server!
