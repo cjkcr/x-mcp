@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import asyncio
+import mimetypes
 from datetime import datetime
 from typing import Any, Sequence
 from dotenv import load_dotenv
@@ -30,13 +31,23 @@ ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
 if not all([API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET]):
     raise ValueError("Twitter API credentials are required")
 
-# Initialize Tweepy client with OAuth 2.0
+# Initialize Tweepy client with OAuth 1.0a (supports both read and write operations)
 client = tweepy.Client(
+    consumer_key=API_KEY,
+    consumer_secret=API_SECRET,
+    access_token=ACCESS_TOKEN,
+    access_token_secret=ACCESS_TOKEN_SECRET,
+    wait_on_rate_limit=True
+)
+
+# Also initialize OAuth 1.0a API for certain operations that might need it
+auth = tweepy.OAuth1UserHandler(
     consumer_key=API_KEY,
     consumer_secret=API_SECRET,
     access_token=ACCESS_TOKEN,
     access_token_secret=ACCESS_TOKEN_SECRET
 )
+api = tweepy.API(auth, wait_on_rate_limit=True)
 
 # Create the MCP server instance
 server = Server("x_mcp")
@@ -198,6 +209,163 @@ async def list_tools() -> list[Tool]:
                 "required": ["tweet_id", "comment"],
             },
         ),
+        Tool(
+            name="upload_media",
+            description="Upload media file (image, video, or GIF) for use in tweets",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the media file to upload",
+                    },
+                    "media_type": {
+                        "type": "string",
+                        "enum": ["image", "video", "gif"],
+                        "description": "Type of media file",
+                    },
+                    "alt_text": {
+                        "type": "string",
+                        "description": "Alternative text for accessibility (optional, for images)",
+                    },
+                },
+                "required": ["file_path", "media_type"],
+            },
+        ),
+        Tool(
+            name="create_tweet_with_media",
+            description="Create a tweet with attached media files",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The text content of the tweet",
+                    },
+                    "media_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of media IDs to attach to the tweet",
+                    },
+                },
+                "required": ["content", "media_ids"],
+            },
+        ),
+        Tool(
+            name="create_draft_tweet_with_media",
+            description="Create a draft tweet with media files",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The text content of the tweet",
+                    },
+                    "media_files": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": {"type": "string"},
+                                "media_type": {"type": "string", "enum": ["image", "video", "gif"]},
+                                "alt_text": {"type": "string"}
+                            },
+                            "required": ["file_path", "media_type"]
+                        },
+                        "description": "List of media files to include in the draft",
+                    },
+                },
+                "required": ["content", "media_files"],
+            },
+        ),
+        Tool(
+            name="get_media_info",
+            description="Get information about uploaded media",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "media_id": {
+                        "type": "string",
+                        "description": "The media ID to get information for",
+                    },
+                },
+                "required": ["media_id"],
+            },
+        ),
+        Tool(
+            name="get_tweet",
+            description="Get the content and information of a specific tweet",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tweet_id": {
+                        "type": "string",
+                        "description": "The ID of the tweet to retrieve",
+                    },
+                    "include_author": {
+                        "type": "boolean",
+                        "description": "Whether to include author information (default: true)",
+                        "default": True,
+                    },
+                },
+                "required": ["tweet_id"],
+            },
+        ),
+        Tool(
+            name="get_tweets",
+            description="Get the content and information of multiple tweets",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tweet_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of tweet IDs to retrieve (max 100)",
+                    },
+                    "include_author": {
+                        "type": "boolean",
+                        "description": "Whether to include author information (default: true)",
+                        "default": True,
+                    },
+                },
+                "required": ["tweet_ids"],
+            },
+        ),
+        Tool(
+            name="search_tweets",
+            description="Search for recent tweets (last 7 days for free users)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query (e.g., 'AI OR artificial intelligence', '#python', 'from:username')",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of tweets to return (default: 10, max: 100)",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                    "include_author": {
+                        "type": "boolean",
+                        "description": "Whether to include author information (default: true)",
+                        "default": True,
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="test_api_connection",
+            description="Test Twitter API connection and permissions",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
 @server.call_tool()
@@ -223,6 +391,22 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
         return await handle_quote_tweet(arguments)
     elif name == "create_draft_quote_tweet":
         return await handle_create_draft_quote_tweet(arguments)
+    elif name == "upload_media":
+        return await handle_upload_media(arguments)
+    elif name == "create_tweet_with_media":
+        return await handle_create_tweet_with_media(arguments)
+    elif name == "create_draft_tweet_with_media":
+        return await handle_create_draft_tweet_with_media(arguments)
+    elif name == "get_media_info":
+        return await handle_get_media_info(arguments)
+    elif name == "get_tweet":
+        return await handle_get_tweet(arguments)
+    elif name == "get_tweets":
+        return await handle_get_tweets(arguments)
+    elif name == "search_tweets":
+        return await handle_search_tweets(arguments)
+    elif name == "test_api_connection":
+        return await handle_test_api_connection(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -360,6 +544,46 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
                 TextContent(
                     type="text",
                     text=f"Draft {draft_id} published as quote tweet ID {tweet_id} quoting tweet {quote_tweet_id}",
+                )
+            ]
+        elif "media_files" in draft and draft.get("type") == "tweet_with_media":
+            # Tweet with media draft
+            content = draft["content"]
+            media_files = draft["media_files"]
+            
+            # Upload media files and collect media IDs
+            media_ids = []
+            for media_file in media_files:
+                file_path = media_file["file_path"]
+                media_type = media_file["media_type"]
+                alt_text = media_file.get("alt_text")
+                
+                # Check if file exists
+                if not os.path.exists(file_path):
+                    raise ValueError(f"Media file not found: {file_path}")
+                
+                # Upload media
+                media_upload = client.media_upload(filename=file_path)
+                media_id = media_upload.media_id_string
+                media_ids.append(media_id)
+                
+                # Add alt text if provided and media is an image
+                if alt_text and media_type in ["image", "gif"]:
+                    client.create_media_metadata(media_id=media_id, alt_text=alt_text)
+                
+                logger.info(f"Uploaded {media_type} for draft: {media_id}")
+            
+            # Create tweet with media
+            response = client.create_tweet(text=content, media_ids=media_ids)
+            tweet_id = response.data['id']
+            logger.info(f"Published tweet with media ID {tweet_id}, media IDs: {media_ids}")
+            
+            # Only delete the draft after successful publishing
+            os.remove(filepath)
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Draft {draft_id} published as tweet with media ID {tweet_id} ({len(media_ids)} media files)",
                 )
             ]
         elif "contents" in draft:
@@ -583,6 +807,462 @@ async def handle_create_draft_quote_tweet(arguments: Any) -> Sequence[TextConten
     except Exception as e:
         logger.error(f"Error creating draft quote tweet: {str(e)}")
         raise RuntimeError(f"Error creating draft quote tweet: {str(e)}")
+
+async def handle_upload_media(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "file_path" not in arguments or "media_type" not in arguments:
+        raise ValueError("Invalid arguments for upload_media")
+    
+    file_path = arguments["file_path"]
+    media_type = arguments["media_type"]
+    alt_text = arguments.get("alt_text")
+    
+    try:
+        # Check if file exists
+        if not os.path.exists(file_path):
+            raise ValueError(f"File not found: {file_path}")
+        
+        # Validate media type based on file extension
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if not mime_type:
+            raise ValueError(f"Cannot determine media type for file: {file_path}")
+        
+        # Validate file type matches specified media_type
+        if media_type == "image" and not mime_type.startswith("image/"):
+            raise ValueError(f"File is not an image: {file_path}")
+        elif media_type == "video" and not mime_type.startswith("video/"):
+            raise ValueError(f"File is not a video: {file_path}")
+        elif media_type == "gif" and mime_type != "image/gif":
+            raise ValueError(f"File is not a GIF: {file_path}")
+        
+        # Upload media using tweepy
+        media_upload = client.media_upload(filename=file_path)
+        media_id = media_upload.media_id_string
+        
+        # Add alt text if provided and media is an image
+        if alt_text and media_type in ["image", "gif"]:
+            client.create_media_metadata(media_id=media_id, alt_text=alt_text)
+            logger.info(f"Added alt text to media {media_id}: {alt_text}")
+        
+        logger.info(f"Uploaded {media_type} media: {media_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Successfully uploaded {media_type} media. Media ID: {media_id}" + 
+                     (f" (with alt text: '{alt_text}')" if alt_text else ""),
+            )
+        ]
+    except tweepy.TweepError as e:
+        logger.error(f"Twitter API error uploading media: {e}")
+        raise RuntimeError(f"Twitter API error uploading media: {e}")
+    except Exception as e:
+        logger.error(f"Error uploading media {file_path}: {str(e)}")
+        raise RuntimeError(f"Error uploading media {file_path}: {str(e)}")
+
+async def handle_create_tweet_with_media(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "content" not in arguments or "media_ids" not in arguments:
+        raise ValueError("Invalid arguments for create_tweet_with_media")
+    
+    content = arguments["content"]
+    media_ids = arguments["media_ids"]
+    
+    if not isinstance(media_ids, list) or not media_ids:
+        raise ValueError("media_ids must be a non-empty list")
+    
+    try:
+        # Create tweet with media
+        response = client.create_tweet(text=content, media_ids=media_ids)
+        tweet_id = response.data['id']
+        
+        logger.info(f"Created tweet with media: {tweet_id}, media IDs: {media_ids}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Successfully created tweet with media. Tweet ID: {tweet_id}, Media IDs: {', '.join(media_ids)}",
+            )
+        ]
+    except tweepy.TweepError as e:
+        logger.error(f"Twitter API error creating tweet with media: {e}")
+        raise RuntimeError(f"Twitter API error creating tweet with media: {e}")
+    except Exception as e:
+        logger.error(f"Error creating tweet with media: {str(e)}")
+        raise RuntimeError(f"Error creating tweet with media: {str(e)}")
+
+async def handle_create_draft_tweet_with_media(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "content" not in arguments or "media_files" not in arguments:
+        raise ValueError("Invalid arguments for create_draft_tweet_with_media")
+    
+    content = arguments["content"]
+    media_files = arguments["media_files"]
+    
+    if not isinstance(media_files, list) or not media_files:
+        raise ValueError("media_files must be a non-empty list")
+    
+    try:
+        # Create draft with media file information
+        draft = {
+            "content": content,
+            "media_files": media_files,
+            "timestamp": datetime.now().isoformat(),
+            "type": "tweet_with_media"
+        }
+        
+        # Ensure drafts directory exists
+        os.makedirs("drafts", exist_ok=True)
+        
+        # Save the draft to a file
+        draft_id = f"media_draft_{int(datetime.now().timestamp())}.json"
+        with open(os.path.join("drafts", draft_id), "w") as f:
+            json.dump(draft, f, indent=2)
+        
+        logger.info(f"Draft tweet with media created: {draft_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Draft tweet with media created with ID {draft_id} ({len(media_files)} media files)",
+            )
+        ]
+    except Exception as e:
+        logger.error(f"Error creating draft tweet with media: {str(e)}")
+        raise RuntimeError(f"Error creating draft tweet with media: {str(e)}")
+
+async def handle_get_media_info(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "media_id" not in arguments:
+        raise ValueError("Invalid arguments for get_media_info")
+    
+    media_id = arguments["media_id"]
+    
+    try:
+        # Get media information using tweepy
+        # Note: This requires the media to be uploaded by the authenticated user
+        media_info = client.get_media(media_id)
+        
+        info_text = f"Media ID: {media_id}\n"
+        if hasattr(media_info, 'type'):
+            info_text += f"Type: {media_info.type}\n"
+        if hasattr(media_info, 'size'):
+            info_text += f"Size: {media_info.size} bytes\n"
+        if hasattr(media_info, 'url'):
+            info_text += f"URL: {media_info.url}\n"
+        
+        logger.info(f"Retrieved media info for: {media_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=info_text,
+            )
+        ]
+    except tweepy.TweepError as e:
+        logger.error(f"Twitter API error getting media info: {e}")
+        raise RuntimeError(f"Twitter API error getting media info: {e}")
+    except Exception as e:
+        logger.error(f"Error getting media info for {media_id}: {str(e)}")
+        raise RuntimeError(f"Error getting media info for {media_id}: {str(e)}")
+
+async def handle_get_tweet(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "tweet_id" not in arguments:
+        raise ValueError("Invalid arguments for get_tweet")
+    
+    tweet_id = arguments["tweet_id"]
+    include_author = arguments.get("include_author", True)
+    
+    try:
+        logger.info(f"Attempting to get tweet: {tweet_id}")
+        
+        # Get tweet information using tweepy
+        tweet_fields = ["id", "text", "created_at", "author_id", "lang", "reply_settings", "referenced_tweets"]
+        user_fields = ["id", "name", "username", "verified"] if include_author else None
+        expansions = ["author_id", "referenced_tweets.id"] if include_author else ["referenced_tweets.id"]
+        
+        response = client.get_tweet(
+            id=tweet_id,
+            tweet_fields=tweet_fields,
+            user_fields=user_fields,
+            expansions=expansions
+        )
+        
+        logger.info(f"API response received for tweet {tweet_id}")
+        
+        if not response.data:
+            logger.warning(f"No data returned for tweet {tweet_id}")
+            raise ValueError(f"Tweet {tweet_id} not found or not accessible")
+        
+        tweet = response.data
+        result_text = f"Tweet ID: {tweet.id}\n"
+        result_text += f"Content: {tweet.text}\n"
+        result_text += f"Created: {tweet.created_at}\n"
+        result_text += f"Language: {tweet.lang}\n"
+        
+        # Add author information if requested and available
+        if include_author and response.includes and 'users' in response.includes:
+            author = response.includes['users'][0]
+            result_text += f"Author: {author.name} (@{author.username})\n"
+            if hasattr(author, 'verified') and author.verified:
+                result_text += "Verified: Yes\n"
+        
+        # Add referenced tweet information if available
+        if hasattr(tweet, 'referenced_tweets') and tweet.referenced_tweets:
+            ref_tweet = tweet.referenced_tweets[0]
+            result_text += f"Reference Type: {ref_tweet.type}\n"
+            result_text += f"Referenced Tweet ID: {ref_tweet.id}\n"
+        
+        logger.info(f"Successfully retrieved tweet: {tweet_id}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=result_text,
+            )
+        ]
+    except tweepy.TweepyException as e:
+        error_msg = f"Twitter API error getting tweet {tweet_id}: {e}"
+        logger.error(error_msg)
+        
+        # Provide more specific error information
+        if "403" in str(e):
+            error_msg += "\n可能原因：API权限不足，请检查Twitter开发者项目的读取权限设置"
+        elif "404" in str(e):
+            error_msg += "\n可能原因：推文不存在、已删除或设为私密"
+        elif "429" in str(e):
+            error_msg += "\n可能原因：API调用频率限制，请稍后重试"
+        elif "401" in str(e):
+            error_msg += "\n可能原因：API凭据无效或过期"
+            
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"Error getting tweet {tweet_id}: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+async def handle_get_tweets(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "tweet_ids" not in arguments:
+        raise ValueError("Invalid arguments for get_tweets")
+    
+    tweet_ids = arguments["tweet_ids"]
+    include_author = arguments.get("include_author", True)
+    
+    if not isinstance(tweet_ids, list) or not tweet_ids:
+        raise ValueError("tweet_ids must be a non-empty list")
+    
+    if len(tweet_ids) > 100:
+        raise ValueError("Maximum 100 tweet IDs allowed")
+    
+    try:
+        # Get multiple tweets using tweepy
+        tweet_fields = ["id", "text", "created_at", "author_id", "lang", "reply_settings", "referenced_tweets"]
+        user_fields = ["id", "name", "username", "verified"] if include_author else None
+        expansions = ["author_id", "referenced_tweets.id"] if include_author else ["referenced_tweets.id"]
+        
+        response = client.get_tweets(
+            ids=tweet_ids,
+            tweet_fields=tweet_fields,
+            user_fields=user_fields,
+            expansions=expansions
+        )
+        
+        if not response.data:
+            raise ValueError("No tweets found or accessible")
+        
+        result_text = f"Retrieved {len(response.data)} tweets:\n\n"
+        
+        # Create a mapping of user IDs to user info for efficiency
+        users_map = {}
+        if include_author and response.includes and 'users' in response.includes:
+            for user in response.includes['users']:
+                users_map[user.id] = user
+        
+        for i, tweet in enumerate(response.data, 1):
+            result_text += f"--- Tweet {i} ---\n"
+            result_text += f"ID: {tweet.id}\n"
+            result_text += f"Content: {tweet.text}\n"
+            result_text += f"Created: {tweet.created_at}\n"
+            result_text += f"Language: {tweet.lang}\n"
+            
+            # Add author information if available
+            if include_author and tweet.author_id in users_map:
+                author = users_map[tweet.author_id]
+                result_text += f"Author: {author.name} (@{author.username})\n"
+                if hasattr(author, 'verified') and author.verified:
+                    result_text += "Verified: Yes\n"
+            
+            # Add referenced tweet information if available
+            if hasattr(tweet, 'referenced_tweets') and tweet.referenced_tweets:
+                ref_tweet = tweet.referenced_tweets[0]
+                result_text += f"Reference Type: {ref_tweet.type}\n"
+                result_text += f"Referenced Tweet ID: {ref_tweet.id}\n"
+            
+            result_text += "\n"
+        
+        logger.info(f"Retrieved {len(response.data)} tweets")
+        
+        return [
+            TextContent(
+                type="text",
+                text=result_text,
+            )
+        ]
+    except tweepy.TweepError as e:
+        logger.error(f"Twitter API error getting tweets: {e}")
+        raise RuntimeError(f"Twitter API error getting tweets: {e}")
+    except Exception as e:
+        logger.error(f"Error getting tweets: {str(e)}")
+        raise RuntimeError(f"Error getting tweets: {str(e)}")
+
+async def handle_search_tweets(arguments: Any) -> Sequence[TextContent]:
+    if not isinstance(arguments, dict) or "query" not in arguments:
+        raise ValueError("Invalid arguments for search_tweets")
+    
+    query = arguments["query"]
+    max_results = arguments.get("max_results", 10)
+    include_author = arguments.get("include_author", True)
+    
+    if max_results < 1 or max_results > 100:
+        raise ValueError("max_results must be between 1 and 100")
+    
+    try:
+        logger.info(f"Searching tweets with query: {query}")
+        
+        # Search tweets using tweepy
+        tweet_fields = ["id", "text", "created_at", "author_id", "lang", "reply_settings", "referenced_tweets"]
+        user_fields = ["id", "name", "username", "verified"] if include_author else None
+        expansions = ["author_id", "referenced_tweets.id"] if include_author else ["referenced_tweets.id"]
+        
+        response = client.search_recent_tweets(
+            query=query,
+            max_results=max_results,
+            tweet_fields=tweet_fields,
+            user_fields=user_fields,
+            expansions=expansions
+        )
+        
+        logger.info(f"Search API response received for query: {query}")
+        
+        if not response.data:
+            return [
+                TextContent(
+                    type="text",
+                    text=f"No tweets found for query: {query}",
+                )
+            ]
+        
+        result_text = f"Search results for '{query}' ({len(response.data)} tweets):\n\n"
+        
+        # Create a mapping of user IDs to user info for efficiency
+        users_map = {}
+        if include_author and response.includes and 'users' in response.includes:
+            for user in response.includes['users']:
+                users_map[user.id] = user
+        
+        for i, tweet in enumerate(response.data, 1):
+            result_text += f"--- Result {i} ---\n"
+            result_text += f"ID: {tweet.id}\n"
+            result_text += f"Content: {tweet.text}\n"
+            result_text += f"Created: {tweet.created_at}\n"
+            result_text += f"Language: {tweet.lang}\n"
+            
+            # Add author information if available
+            if include_author and tweet.author_id in users_map:
+                author = users_map[tweet.author_id]
+                result_text += f"Author: {author.name} (@{author.username})\n"
+                if hasattr(author, 'verified') and author.verified:
+                    result_text += "Verified: Yes\n"
+            
+            # Add referenced tweet information if available
+            if hasattr(tweet, 'referenced_tweets') and tweet.referenced_tweets:
+                ref_tweet = tweet.referenced_tweets[0]
+                result_text += f"Reference Type: {ref_tweet.type}\n"
+                result_text += f"Referenced Tweet ID: {ref_tweet.id}\n"
+            
+            result_text += "\n"
+        
+        logger.info(f"Search completed: {len(response.data)} tweets found for '{query}'")
+        
+        return [
+            TextContent(
+                type="text",
+                text=result_text,
+            )
+        ]
+    except tweepy.TweepyException as e:
+        error_msg = f"Twitter API error searching tweets: {e}"
+        logger.error(error_msg)
+        
+        # Provide more specific error information
+        if "403" in str(e):
+            error_msg += "\n可能原因：API权限不足，免费用户可能无法使用搜索功能，或需要升级API计划"
+        elif "429" in str(e):
+            error_msg += "\n可能原因：API调用频率限制，请稍后重试"
+        elif "401" in str(e):
+            error_msg += "\n可能原因：API凭据无效或过期"
+        elif "400" in str(e):
+            error_msg += f"\n可能原因：搜索查询格式无效：'{query}'"
+            
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"Error searching tweets: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+async def handle_test_api_connection(arguments: Any) -> Sequence[TextContent]:
+    """Test Twitter API connection and permissions"""
+    try:
+        logger.info("Testing Twitter API connection...")
+        
+        # Test 1: Get current user (should work with basic auth)
+        try:
+            me = client.get_me()
+            if me.data:
+                result_text = f"✅ API连接成功！\n"
+                result_text += f"当前用户: {me.data.name} (@{me.data.username})\n"
+                result_text += f"用户ID: {me.data.id}\n\n"
+            else:
+                result_text = "❌ 无法获取用户信息\n\n"
+        except Exception as e:
+            result_text = f"❌ 获取用户信息失败: {e}\n\n"
+        
+        # Test 2: Try a simple search (this often fails for free users)
+        try:
+            search_response = client.search_recent_tweets(
+                query="hello",
+                max_results=5,
+                tweet_fields=["id", "text"]
+            )
+            if search_response.data:
+                result_text += f"✅ 搜索功能正常 (找到 {len(search_response.data)} 条推文)\n"
+            else:
+                result_text += "⚠️ 搜索功能返回空结果\n"
+        except tweepy.TweepyException as e:
+            if "403" in str(e):
+                result_text += "❌ 搜索功能被禁止 - 可能需要升级API计划\n"
+            elif "429" in str(e):
+                result_text += "⚠️ 搜索功能受限 - API调用频率限制\n"
+            else:
+                result_text += f"❌ 搜索功能错误: {e}\n"
+        except Exception as e:
+            result_text += f"❌ 搜索功能异常: {e}\n"
+        
+        # Test 3: Try to get a well-known tweet (if we have one)
+        result_text += "\n=== API权限总结 ===\n"
+        result_text += "如果搜索功能失败，这通常意味着:\n"
+        result_text += "1. 免费API计划不支持搜索功能\n"
+        result_text += "2. 需要升级到付费API计划\n"
+        result_text += "3. API权限设置不正确\n"
+        
+        logger.info("API connection test completed")
+        
+        return [
+            TextContent(
+                type="text",
+                text=result_text,
+            )
+        ]
+    except Exception as e:
+        error_msg = f"API连接测试失败: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
 
 # Implement the main function
 async def main():

@@ -19,6 +19,13 @@ An MCP server to create, manage and publish X/Twitter posts directly through Cla
 - ✅ Retweet existing tweets
 - ✅ Quote tweet with comments
 - ✅ Create draft quote tweets
+- ✅ Upload media files (images, videos, GIFs)
+- ✅ Create tweets with media attachments
+- ✅ Add alt text for accessibility
+- ✅ Get media file information
+- ✅ Get tweet content and information
+- ✅ Search recent tweets (last 7 days)
+- ✅ Batch retrieve multiple tweets
 - ✅ Delete drafts
 - ✅ Draft preservation on publish failure
 
@@ -146,6 +153,12 @@ Works with both Claude code and Gemini CLI:
 * "Retweet tweet 1234567890"
 * "Quote tweet 1234567890 with comment 'This is exactly what I was thinking!'"
 * "Create a draft quote tweet for 1234567890 with comment 'Amazing insight here'"
+* "Upload image /path/to/image.jpg with alt text 'Beautiful sunset over the mountains'"
+* "Create tweet with media 'Check out this amazing photo!' using media IDs 123456789"
+* "Create draft tweet with media 'My latest project' and attach /path/to/video.mp4"
+* "Get tweet 1234567890 content and information"
+* "Search for tweets containing 'AI OR artificial intelligence' from the last 7 days"
+* "Get information for tweets 123456789, 987654321, 555666777"
 
 ## Troubleshooting
 
@@ -162,7 +175,9 @@ This project is based on the excellent work by [Vidhu Panhavoor Vasudevan](https
 ### What's New in This Fork
 - ✅ **Reply to tweets functionality** - Create draft replies and reply directly to existing tweets
 - ✅ **Retweet functionality** - Simple retweets and quote tweets with comments
-- ✅ **Enhanced draft management** - Improved draft preservation on publish failure, support for quote tweet drafts
+- ✅ **Media functionality** - Upload images, videos, GIFs with alt text support
+- ✅ **Tweet retrieval functionality** - Get tweet content, search tweets, batch retrieve multiple tweets
+- ✅ **Enhanced draft management** - Improved draft preservation on publish failure, support for all draft types
 - ✅ **Better error handling** - More detailed error messages and recovery options
 
 Special thanks to the original author for creating the foundation of this MCP server!
