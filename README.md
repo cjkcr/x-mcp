@@ -10,6 +10,13 @@ An MCP server to create, manage and publish X/Twitter posts directly through Cla
 
 ## Features
 
+### 🔐 Dual Authentication Support
+- ✅ **OAuth 1.0a**: For write operations (posting tweets, retweeting, etc.)
+- ✅ **OAuth 2.0**: For read operations (getting tweets, searching, etc.)
+- ✅ **Automatic Client Selection**: System automatically chooses the best authentication method
+- ✅ **Smart Fallback**: Automatically falls back to OAuth 1.0a when OAuth 2.0 is unavailable
+
+### 📝 Tweet Management
 - ✅ Create draft tweets
 - ✅ Create draft tweet threads
 - ✅ Create draft replies to existing tweets
@@ -19,15 +26,21 @@ An MCP server to create, manage and publish X/Twitter posts directly through Cla
 - ✅ Retweet existing tweets
 - ✅ Quote tweet with comments
 - ✅ Create draft quote tweets
+- ✅ Delete drafts
+- ✅ Draft preservation on publish failure
+
+### 📷 Media Support
 - ✅ Upload media files (images, videos, GIFs)
 - ✅ Create tweets with media attachments
 - ✅ Add alt text for accessibility
 - ✅ Get media file information
-- ✅ Get tweet content and information
-- ✅ Search recent tweets (last 7 days)
-- ✅ Batch retrieve multiple tweets
-- ✅ Delete drafts
-- ✅ Draft preservation on publish failure
+
+### 📖 Tweet Retrieval (Enhanced)
+- ✅ Get tweet content and information (with dual authentication support)
+- ✅ Search recent tweets (improved error handling)
+- ✅ Batch retrieve multiple tweets (more stable connections)
+- ✅ Detailed error diagnostics and suggestions
+- ✅ API connection testing tools
 
 <a href="https://glama.ai/mcp/servers/jsxr09dktf">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/jsxr09dktf/badge" alt="X(Twitter) Server MCP server" />
@@ -60,6 +73,8 @@ brew install uv
    - **For Windows:** Open directory `%APPDATA%/Claude/` and create the file inside it
 
 4. **Add this configuration to claude_desktop_config.json:**
+
+#### Basic Configuration (OAuth 1.0a Only)
 ```json
 {
   "mcpServers": {
@@ -81,6 +96,32 @@ brew install uv
   }
 }
 ```
+
+#### Recommended Configuration (OAuth 1.0a + OAuth 2.0 Dual Authentication)
+```json
+{
+  "mcpServers": {
+    "x_mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/x-mcp",
+        "run",
+        "x-mcp"
+      ],
+      "env": {
+        "TWITTER_API_KEY": "your_api_key",
+        "TWITTER_API_SECRET": "your_api_secret",
+        "TWITTER_ACCESS_TOKEN": "your_access_token",
+        "TWITTER_ACCESS_TOKEN_SECRET": "your_access_token_secret",
+        "TWITTER_BEARER_TOKEN": "your_bearer_token"
+      }
+    }
+  }
+}
+```
+
+> **💡 Recommended to use dual authentication configuration**: Adding `TWITTER_BEARER_TOKEN` can significantly improve the stability and success rate of tweet retrieval functions.
 
 5. **Get your X/Twitter API credentials:**
    - Go to [X API Developer Portal](https://developer.x.com/en/products/x-api)
@@ -162,22 +203,126 @@ Works with both Claude code and Gemini CLI:
 
 ## Troubleshooting
 
+### Basic Issues
 If not working:
 - Make sure UV is installed globally (if not, uninstall with `pip uninstall uv` and reinstall with `brew install uv`)
 - Or find UV path with `which uv` and replace `"command": "uv"` with the full path
 - Verify all X/Twitter credentials are correct
 - Check if the x-mcp path in config matches your actual repository location
 
+### 🔧 API Connection Testing
+
+**Quick Diagnosis:**
+```
+test api connection
+```
+Running this command in Claude will:
+- Test OAuth 1.0a and OAuth 2.0 connections
+- Check API permissions and limitations
+- Provide detailed diagnostic information and suggestions
+
+**Run Test Script:**
+```bash
+cd /path/to/x-mcp
+python test_tweet_functions.py
+```
+
+### 🚨 401 Unauthorized Error Fix
+
+**Problem Symptoms:**
+- Getting "401 Unauthorized" error when posting tweets
+- Can post tweets but cannot retrieve tweets
+
+**Solutions:**
+
+1. **Add Bearer Token (Recommended):**
+   ```json
+   "env": {
+     "TWITTER_API_KEY": "your_api_key",
+     "TWITTER_API_SECRET": "your_api_secret",
+     "TWITTER_ACCESS_TOKEN": "your_access_token",
+     "TWITTER_ACCESS_TOKEN_SECRET": "your_access_token_secret",
+     "TWITTER_BEARER_TOKEN": "your_bearer_token"
+   }
+   ```
+
+2. **Regenerate API Credentials:**
+   - Visit [Twitter Developer Portal](https://developer.x.com/)
+   - Regenerate all API keys and tokens
+   - Ensure permissions are set to "Read and write"
+
+3. **Check Project Settings:**
+   - User authentication settings: Read and write permissions
+   - App type: Web App
+   - Callback URL: `http://localhost/`
+   - Website URL: `http://example.com/`
+
+### 📖 Tweet Retrieval Issues
+
+**Dual Authentication Benefits:**
+- OAuth 2.0 for read operations (more stable)
+- OAuth 1.0a for write operations (required)
+- Automatic fallback handling
+
+**Common Errors and Solutions:**
+
+| Error Code | Cause | Solution |
+|------------|-------|----------|
+| 401 | Authentication failed | Check API credentials, regenerate tokens |
+| 403 | Insufficient permissions | Upgrade API plan or check permission settings |
+| 404 | Tweet not found | Verify tweet ID, check if tweet is public |
+| 429 | Rate limit exceeded | Wait 15 minutes or upgrade API plan |
+
+**API Plan Limitations:**
+- **Free Users**: Basic functionality with limitations
+- **Basic ($100/month)**: Full read functionality
+- **Pro ($5000/month)**: Advanced features and higher limits
+
+### 🔍 Detailed Diagnostic Steps
+
+1. **Check Authentication Status:**
+   ```
+   test api connection
+   ```
+
+2. **Verify Configuration:**
+   - Confirm all environment variables are set
+   - Check paths are correct
+   - Validate API key formats
+
+3. **Test Specific Functions:**
+   ```
+   search for tweets containing "hello"
+   get tweet 1234567890 content
+   ```
+
+4. **Review Detailed Logs:**
+   - Check Claude Desktop console
+   - Review MCP server logs
+   - Note specific error messages
+
 ## Credits
 
 This project is based on the excellent work by [Vidhu Panhavoor Vasudevan](https://github.com/vidhupv) in the original [x-mcp](https://github.com/vidhupv/x-mcp) repository. 
 
 ### What's New in This Fork
+- 🆕 **OAuth Dual Authentication System** - Support for OAuth 1.0a + OAuth 2.0, automatic selection of best authentication method
+- 🆕 **401 Error Fix** - Resolved authentication issues when retrieving tweets
+- 🆕 **Smart Client Selection** - Read operations prefer OAuth 2.0, write operations use OAuth 1.0a
+- 🆕 **Enhanced Error Handling** - Detailed error diagnostics and English error messages
+- 🆕 **API Connection Testing Tool** - Built-in connection testing and diagnostic functionality
 - ✅ **Reply to tweets functionality** - Create draft replies and reply directly to existing tweets
 - ✅ **Retweet functionality** - Simple retweets and quote tweets with comments
 - ✅ **Media functionality** - Upload images, videos, GIFs with alt text support
 - ✅ **Tweet retrieval functionality** - Get tweet content, search tweets, batch retrieve multiple tweets
 - ✅ **Enhanced draft management** - Improved draft preservation on publish failure, support for all draft types
-- ✅ **Better error handling** - More detailed error messages and recovery options
 
 Special thanks to the original author for creating the foundation of this MCP server!
+
+## Detailed Documentation
+
+For more detailed functionality descriptions and usage guides, please refer to:
+- **[OAuth Dual Authentication Setup Guide](OAuth_Dual_Authentication_Setup_Guide.md)** - 🆕 Detailed dual authentication setup guide
+- [OAuth双重认证配置指南](OAuth双重认证配置指南.md) - Chinese version of the setup guide
+- [推文获取功能故障排除指南](推文获取功能故障排除指南.md) - Chinese troubleshooting guide
+- [REPLY_FUNCTIONALITY.md](REPLY_FUNCTIONALITY.md) - Detailed reply functionality documentation

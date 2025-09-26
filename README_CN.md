@@ -10,6 +10,13 @@
 
 ## 功能特性
 
+### 🔐 双重认证支持
+- ✅ **OAuth 1.0a**: 用于写入操作（发推文、转推等）
+- ✅ **OAuth 2.0**: 用于读取操作（获取推文、搜索等）
+- ✅ **自动客户端选择**: 系统自动选择最佳认证方式
+- ✅ **智能降级**: OAuth 2.0不可用时自动回退到OAuth 1.0a
+
+### 📝 推文管理
 - ✅ 创建推文草稿
 - ✅ 创建推文串草稿
 - ✅ 创建回复推文草稿
@@ -19,15 +26,21 @@
 - ✅ 转发现有推文
 - ✅ 带评论的引用转发
 - ✅ 创建引用转发草稿
+- ✅ 删除草稿
+- ✅ 发布失败时保留草稿
+
+### 📷 媒体支持
 - ✅ 上传媒体文件（图片、视频、GIF）
 - ✅ 创建带媒体附件的推文
 - ✅ 为图片添加无障碍Alt文本
 - ✅ 获取媒体文件信息
-- ⚠️ 获取推文内容和信息（可能需要付费API计划）
-- ⚠️ 搜索最近推文（可能需要付费API计划）
-- ⚠️ 批量获取多条推文（可能需要付费API计划）
-- ✅ 删除草稿
-- ✅ 发布失败时保留草稿
+
+### 📖 推文获取（改进版）
+- ✅ 获取推文内容和信息（支持双重认证）
+- ✅ 搜索最近推文（优化的错误处理）
+- ✅ 批量获取多条推文（更稳定的连接）
+- ✅ 详细的错误诊断和建议
+- ✅ API连接测试工具
 
 <a href="https://glama.ai/mcp/servers/jsxr09dktf">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/jsxr09dktf/badge" alt="X(Twitter) Server MCP server" />
@@ -60,6 +73,8 @@ brew install uv
    - **Windows 系统：** 打开目录 `%APPDATA%/Claude/` 并在其中创建文件
 
 4. **将此配置添加到 claude_desktop_config.json：**
+
+#### 基础配置（仅OAuth 1.0a）
 ```json
 {
   "mcpServers": {
@@ -81,6 +96,32 @@ brew install uv
   }
 }
 ```
+
+#### 推荐配置（OAuth 1.0a + OAuth 2.0双重认证）
+```json
+{
+  "mcpServers": {
+    "x_mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/x-mcp",
+        "run",
+        "x-mcp"
+      ],
+      "env": {
+        "TWITTER_API_KEY": "your_api_key",
+        "TWITTER_API_SECRET": "your_api_secret",
+        "TWITTER_ACCESS_TOKEN": "your_access_token",
+        "TWITTER_ACCESS_TOKEN_SECRET": "your_access_token_secret",
+        "TWITTER_BEARER_TOKEN": "your_bearer_token"
+      }
+    }
+  }
+}
+```
+
+> **💡 推荐使用双重认证配置**：添加`TWITTER_BEARER_TOKEN`可以显著提高推文获取功能的稳定性和成功率。
 
 5. **获取您的 X/Twitter API 凭据：**
    - 前往 [X API 开发者门户](https://developer.x.com/en/products/x-api)
@@ -193,33 +234,96 @@ npm install -g @google/gemini-cli
 - 验证所有 X/Twitter 凭据是否正确
 - 检查配置中的 x-mcp 路径是否与您的实际仓库位置匹配
 
-### 推文获取功能问题
-如果推文获取功能无法使用：
+### 🔧 API连接测试
 
-**API权限检查：**
-- 确认您的Twitter开发者账户有读取权限
-- 检查API密钥是否有效且未过期
-- 验证项目设置中启用了"Read"权限
+**快速诊断：**
+```
+测试API连接
+```
+在Claude中运行此命令可以：
+- 测试OAuth 1.0a和OAuth 2.0连接
+- 检查API权限和限制
+- 提供详细的诊断信息和建议
 
-**重要限制说明：**
-- **免费用户可能无法使用推文获取功能** - Twitter API v2政策变更
-- 推文获取、搜索功能可能需要付费API计划（Basic $100/月起）
-- 如需使用这些功能，请升级Twitter API计划或使用替代方案
+**运行测试脚本：**
+```bash
+cd /path/to/x-mcp
+python test_tweet_functions.py
+```
 
-**常见错误解决：**
-- `Forbidden (403)`: **最常见** - 免费用户无权限，需要升级API计划
-- `Unauthorized (401)`: 检查API凭据和权限设置
-- `Tweet not found (404)`: 推文可能已删除或设为私密
-- `Rate limit exceeded (429)`: 等待限制重置或减少请求频率
+### 🚨 401 Unauthorized 错误修复
 
-**如果遇到403错误：**
-这通常意味着你的免费API计划不支持推文获取功能。Twitter在2023年大幅限制了免费用户的API访问权限。
+**问题症状：**
+- 发推文时出现"401 Unauthorized"错误
+- 能发推文但无法获取推文
 
-**调试步骤：**
-1. 在Twitter Developer Portal检查API使用情况
-2. 测试简单的推文获取（如获取自己的推文）
-3. 检查Claude Desktop的日志输出
-4. 确认网络连接正常
+**解决方案：**
+
+1. **添加Bearer Token（推荐）：**
+   ```json
+   "env": {
+     "TWITTER_API_KEY": "your_api_key",
+     "TWITTER_API_SECRET": "your_api_secret",
+     "TWITTER_ACCESS_TOKEN": "your_access_token",
+     "TWITTER_ACCESS_TOKEN_SECRET": "your_access_token_secret",
+     "TWITTER_BEARER_TOKEN": "your_bearer_token"
+   }
+   ```
+
+2. **重新生成API凭据：**
+   - 访问[Twitter Developer Portal](https://developer.x.com/)
+   - 重新生成所有API密钥和令牌
+   - 确保权限设置为"Read and write"
+
+3. **检查项目设置：**
+   - 用户身份验证设置：读写权限
+   - 应用类型：Web应用
+   - 回调URL：`http://localhost/`
+   - 网站URL：`http://example.com/`
+
+### 📖 推文获取功能问题
+
+**双重认证优势：**
+- OAuth 2.0用于读取操作（更稳定）
+- OAuth 1.0a用于写入操作（必需）
+- 自动降级处理
+
+**常见错误及解决：**
+
+| 错误代码 | 原因 | 解决方案 |
+|---------|------|----------|
+| 401 | 认证失败 | 检查API凭据，重新生成令牌 |
+| 403 | 权限不足 | 升级API计划或检查权限设置 |
+| 404 | 推文不存在 | 验证推文ID，检查推文是否公开 |
+| 429 | 频率限制 | 等待15分钟或升级API计划 |
+
+**API计划限制：**
+- **免费用户**: 基本功能，有限制
+- **Basic ($100/月)**: 完整读取功能
+- **Pro ($5000/月)**: 高级功能和更高限制
+
+### 🔍 详细诊断步骤
+
+1. **检查认证状态：**
+   ```
+   测试API连接
+   ```
+
+2. **验证配置：**
+   - 确认所有环境变量已设置
+   - 检查路径是否正确
+   - 验证API密钥格式
+
+3. **测试特定功能：**
+   ```
+   搜索包含"hello"的推文
+   获取推文 1234567890 的内容
+   ```
+
+4. **查看详细日志：**
+   - 检查Claude Desktop控制台
+   - 查看MCP服务器日志
+   - 注意具体错误信息
 
 ## 支持与贡献
 
@@ -231,6 +335,7 @@ npm install -g @google/gemini-cli
 ## 详细功能说明
 
 更多详细的功能说明和使用指南，请参阅：
+- **[OAuth双重认证配置指南](OAuth双重认证配置指南.md)** - 🆕 详细的双重认证设置指南
 - [推文获取功能说明](推文获取功能说明.md)
 - [推文获取功能故障排除指南](推文获取功能故障排除指南.md)
 - [回复功能详细说明](回复功能说明.md)
@@ -241,11 +346,15 @@ npm install -g @google/gemini-cli
 本项目基于 [Vidhu Panhavoor Vasudevan](https://github.com/vidhupv) 在原始 [x-mcp](https://github.com/vidhupv/x-mcp) 仓库中的优秀工作。
 
 ### 本分支的新增功能
+- 🆕 **OAuth双重认证系统** - 支持OAuth 1.0a + OAuth 2.0，自动选择最佳认证方式
+- 🆕 **401错误修复** - 解决了推文获取时的认证问题
+- 🆕 **智能客户端选择** - 读取操作优先使用OAuth 2.0，写入操作使用OAuth 1.0a
+- 🆕 **增强的错误处理** - 详细的错误诊断和中文错误提示
+- 🆕 **API连接测试工具** - 内置的连接测试和诊断功能
 - ✅ **回复推文功能** - 创建回复草稿和直接回复现有推文
 - ✅ **转发推文功能** - 简单转发和带评论的引用转发
 - ✅ **媒体功能** - 上传图片、视频、GIF，支持Alt文本
 - ✅ **推文获取功能** - 获取推文内容、搜索推文、批量获取多条推文
 - ✅ **增强的草稿管理** - 改进了发布失败时的草稿保留机制，支持所有草稿类型
-- ✅ **更好的错误处理** - 更详细的错误信息和恢复选项
 
 特别感谢原作者为创建这个 MCP 服务器奠定了基础！

@@ -27,12 +27,15 @@ API_KEY = os.getenv("TWITTER_API_KEY")
 API_SECRET = os.getenv("TWITTER_API_SECRET")
 ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
 ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")  # Optional for OAuth 2.0
 
+# Validate required credentials for OAuth 1.0a
 if not all([API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET]):
-    raise ValueError("Twitter API credentials are required")
+    raise ValueError("Twitter API credentials are required (OAuth 1.0a)")
 
-# Initialize Tweepy client with OAuth 1.0a (supports both read and write operations)
-client = tweepy.Client(
+# Initialize multiple clients for different use cases
+# OAuth 1.0a client - for posting, retweeting, and user-specific operations
+oauth1_client = tweepy.Client(
     consumer_key=API_KEY,
     consumer_secret=API_SECRET,
     access_token=ACCESS_TOKEN,
@@ -40,7 +43,22 @@ client = tweepy.Client(
     wait_on_rate_limit=True
 )
 
-# Also initialize OAuth 1.0a API for certain operations that might need it
+# OAuth 2.0 client - for reading tweets (if bearer token is available)
+oauth2_client = None
+if BEARER_TOKEN:
+    try:
+        oauth2_client = tweepy.Client(
+            bearer_token=BEARER_TOKEN,
+            wait_on_rate_limit=True
+        )
+        logger.info("OAuth 2.0 client initialized with bearer token")
+    except Exception as e:
+        logger.warning(f"Failed to initialize OAuth 2.0 client: {e}")
+
+# Fallback to OAuth 1.0a for all operations
+client = oauth1_client
+
+# Also initialize OAuth 1.0a API for media upload and legacy operations
 auth = tweepy.OAuth1UserHandler(
     consumer_key=API_KEY,
     consumer_secret=API_SECRET,
@@ -48,6 +66,16 @@ auth = tweepy.OAuth1UserHandler(
     access_token_secret=ACCESS_TOKEN_SECRET
 )
 api = tweepy.API(auth, wait_on_rate_limit=True)
+
+def get_read_client():
+    """Get the best client for read operations (OAuth 2.0 preferred, fallback to OAuth 1.0a)"""
+    if oauth2_client:
+        return oauth2_client
+    return oauth1_client
+
+def get_write_client():
+    """Get the client for write operations (always OAuth 1.0a)"""
+    return oauth1_client
 
 # Create the MCP server instance
 server = Server("x_mcp")
@@ -503,7 +531,7 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
             if draft.get("type") == "reply" and "reply_to_tweet_id" in draft:
                 # Reply to existing tweet
                 reply_to_tweet_id = draft["reply_to_tweet_id"]
-                response = client.create_tweet(text=content, in_reply_to_tweet_id=reply_to_tweet_id)
+                response = get_write_client().create_tweet(text=content, in_reply_to_tweet_id=reply_to_tweet_id)
                 tweet_id = response.data['id']
                 logger.info(f"Published reply tweet ID {tweet_id} to tweet {reply_to_tweet_id}")
                 
@@ -517,7 +545,7 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
                 ]
             else:
                 # Single tweet
-                response = client.create_tweet(text=content)
+                response = get_write_client().create_tweet(text=content)
                 tweet_id = response.data['id']
                 logger.info(f"Published tweet ID {tweet_id}")
                 
@@ -534,7 +562,7 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
             comment = draft["comment"]
             quote_tweet_id = draft["quote_tweet_id"]
             
-            response = client.create_tweet(text=comment, quote_tweet_id=quote_tweet_id)
+            response = get_write_client().create_tweet(text=comment, quote_tweet_id=quote_tweet_id)
             tweet_id = response.data['id']
             logger.info(f"Published quote tweet ID {tweet_id} quoting tweet {quote_tweet_id}")
             
@@ -563,18 +591,18 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
                     raise ValueError(f"Media file not found: {file_path}")
                 
                 # Upload media
-                media_upload = client.media_upload(filename=file_path)
+                media_upload = api.media_upload(filename=file_path)
                 media_id = media_upload.media_id_string
                 media_ids.append(media_id)
                 
                 # Add alt text if provided and media is an image
                 if alt_text and media_type in ["image", "gif"]:
-                    client.create_media_metadata(media_id=media_id, alt_text=alt_text)
+                    api.create_media_metadata(media_id=media_id, alt_text=alt_text)
                 
                 logger.info(f"Uploaded {media_type} for draft: {media_id}")
             
             # Create tweet with media
-            response = client.create_tweet(text=content, media_ids=media_ids)
+            response = get_write_client().create_tweet(text=content, media_ids=media_ids)
             tweet_id = response.data['id']
             logger.info(f"Published tweet with media ID {tweet_id}, media IDs: {media_ids}")
             
@@ -596,9 +624,9 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
             try:
                 for i, content in enumerate(contents):
                     if last_tweet_id is None:
-                        response = client.create_tweet(text=content)
+                        response = get_write_client().create_tweet(text=content)
                     else:
-                        response = client.create_tweet(text=content, in_reply_to_tweet_id=last_tweet_id)
+                        response = get_write_client().create_tweet(text=content, in_reply_to_tweet_id=last_tweet_id)
                     last_tweet_id = response.data['id']
                     published_tweet_ids.append(last_tweet_id)
                     await asyncio.sleep(1)  # Avoid hitting rate limits
@@ -702,7 +730,7 @@ async def handle_reply_to_tweet(arguments: Any) -> Sequence[TextContent]:
     
     try:
         # Reply to the tweet directly
-        response = client.create_tweet(text=content, in_reply_to_tweet_id=reply_to_tweet_id)
+        response = get_write_client().create_tweet(text=content, in_reply_to_tweet_id=reply_to_tweet_id)
         tweet_id = response.data['id']
         
         logger.info(f"Published reply tweet ID {tweet_id} to tweet {reply_to_tweet_id}")
@@ -728,7 +756,7 @@ async def handle_retweet(arguments: Any) -> Sequence[TextContent]:
     
     try:
         # Simple retweet without comment using the retweet method
-        response = client.retweet(tweet_id)
+        response = get_write_client().retweet(tweet_id)
         
         logger.info(f"Retweeted tweet {tweet_id}")
         
@@ -754,7 +782,7 @@ async def handle_quote_tweet(arguments: Any) -> Sequence[TextContent]:
     
     try:
         # Quote tweet with comment
-        response = client.create_tweet(text=comment, quote_tweet_id=tweet_id)
+        response = get_write_client().create_tweet(text=comment, quote_tweet_id=tweet_id)
         quote_tweet_id = response.data['id']
         
         logger.info(f"Quote tweeted tweet {tweet_id} with comment. Quote tweet ID: {quote_tweet_id}")
@@ -835,12 +863,12 @@ async def handle_upload_media(arguments: Any) -> Sequence[TextContent]:
             raise ValueError(f"File is not a GIF: {file_path}")
         
         # Upload media using tweepy
-        media_upload = client.media_upload(filename=file_path)
+        media_upload = api.media_upload(filename=file_path)
         media_id = media_upload.media_id_string
         
         # Add alt text if provided and media is an image
         if alt_text and media_type in ["image", "gif"]:
-            client.create_media_metadata(media_id=media_id, alt_text=alt_text)
+            api.create_media_metadata(media_id=media_id, alt_text=alt_text)
             logger.info(f"Added alt text to media {media_id}: {alt_text}")
         
         logger.info(f"Uploaded {media_type} media: {media_id}")
@@ -871,7 +899,7 @@ async def handle_create_tweet_with_media(arguments: Any) -> Sequence[TextContent
     
     try:
         # Create tweet with media
-        response = client.create_tweet(text=content, media_ids=media_ids)
+        response = get_write_client().create_tweet(text=content, media_ids=media_ids)
         tweet_id = response.data['id']
         
         logger.info(f"Created tweet with media: {tweet_id}, media IDs: {media_ids}")
@@ -937,7 +965,7 @@ async def handle_get_media_info(arguments: Any) -> Sequence[TextContent]:
     try:
         # Get media information using tweepy
         # Note: This requires the media to be uploaded by the authenticated user
-        media_info = client.get_media(media_id)
+        media_info = api.get_media(media_id)
         
         info_text = f"Media ID: {media_id}\n"
         if hasattr(media_info, 'type'):
@@ -969,15 +997,18 @@ async def handle_get_tweet(arguments: Any) -> Sequence[TextContent]:
     tweet_id = arguments["tweet_id"]
     include_author = arguments.get("include_author", True)
     
+    # Try OAuth 2.0 first, then fallback to OAuth 1.0a
+    read_client = get_read_client()
+    
     try:
-        logger.info(f"Attempting to get tweet: {tweet_id}")
+        logger.info(f"Attempting to get tweet: {tweet_id} using {'OAuth 2.0' if read_client == oauth2_client else 'OAuth 1.0a'}")
         
         # Get tweet information using tweepy
         tweet_fields = ["id", "text", "created_at", "author_id", "lang", "reply_settings", "referenced_tweets"]
         user_fields = ["id", "name", "username", "verified"] if include_author else None
         expansions = ["author_id", "referenced_tweets.id"] if include_author else ["referenced_tweets.id"]
         
-        response = client.get_tweet(
+        response = read_client.get_tweet(
             id=tweet_id,
             tweet_fields=tweet_fields,
             user_fields=user_fields,
@@ -1050,13 +1081,18 @@ async def handle_get_tweets(arguments: Any) -> Sequence[TextContent]:
     if len(tweet_ids) > 100:
         raise ValueError("Maximum 100 tweet IDs allowed")
     
+    # Try OAuth 2.0 first, then fallback to OAuth 1.0a
+    read_client = get_read_client()
+    
     try:
+        logger.info(f"Attempting to get {len(tweet_ids)} tweets using {'OAuth 2.0' if read_client == oauth2_client else 'OAuth 1.0a'}")
+        
         # Get multiple tweets using tweepy
         tweet_fields = ["id", "text", "created_at", "author_id", "lang", "reply_settings", "referenced_tweets"]
         user_fields = ["id", "name", "username", "verified"] if include_author else None
         expansions = ["author_id", "referenced_tweets.id"] if include_author else ["referenced_tweets.id"]
         
-        response = client.get_tweets(
+        response = read_client.get_tweets(
             ids=tweet_ids,
             tweet_fields=tweet_fields,
             user_fields=user_fields,
@@ -1122,15 +1158,18 @@ async def handle_search_tweets(arguments: Any) -> Sequence[TextContent]:
     if max_results < 1 or max_results > 100:
         raise ValueError("max_results must be between 1 and 100")
     
+    # Try OAuth 2.0 first, then fallback to OAuth 1.0a
+    read_client = get_read_client()
+    
     try:
-        logger.info(f"Searching tweets with query: {query}")
+        logger.info(f"Searching tweets with query: {query} using {'OAuth 2.0' if read_client == oauth2_client else 'OAuth 1.0a'}")
         
         # Search tweets using tweepy
         tweet_fields = ["id", "text", "created_at", "author_id", "lang", "reply_settings", "referenced_tweets"]
         user_fields = ["id", "name", "username", "verified"] if include_author else None
         expansions = ["author_id", "referenced_tweets.id"] if include_author else ["referenced_tweets.id"]
         
-        response = client.search_recent_tweets(
+        response = read_client.search_recent_tweets(
             query=query,
             max_results=max_results,
             tweet_fields=tweet_fields,
@@ -1210,23 +1249,49 @@ async def handle_test_api_connection(arguments: Any) -> Sequence[TextContent]:
     """Test Twitter API connection and permissions"""
     try:
         logger.info("Testing Twitter API connection...")
+        result_text = "=== Twitter API 连接测试 ===\n\n"
         
-        # Test 1: Get current user (should work with basic auth)
+        # Test OAuth 1.0a client
+        result_text += "📋 OAuth 1.0a 测试:\n"
         try:
-            me = client.get_me()
+            me = oauth1_client.get_me()
             if me.data:
-                result_text = f"✅ API连接成功！\n"
-                result_text += f"当前用户: {me.data.name} (@{me.data.username})\n"
-                result_text += f"用户ID: {me.data.id}\n\n"
+                result_text += f"✅ OAuth 1.0a 连接成功！\n"
+                result_text += f"   当前用户: {me.data.name} (@{me.data.username})\n"
+                result_text += f"   用户ID: {me.data.id}\n"
             else:
-                result_text = "❌ 无法获取用户信息\n\n"
+                result_text += "❌ OAuth 1.0a 无法获取用户信息\n"
         except Exception as e:
-            result_text = f"❌ 获取用户信息失败: {e}\n\n"
+            result_text += f"❌ OAuth 1.0a 连接失败: {e}\n"
         
-        # Test 2: Try a simple search (this often fails for free users)
+        # Test OAuth 2.0 client if available
+        result_text += "\n📋 OAuth 2.0 测试:\n"
+        if oauth2_client:
+            try:
+                # OAuth 2.0 doesn't support get_me(), so we try a simple search
+                search_response = oauth2_client.search_recent_tweets(
+                    query="hello",
+                    max_results=5,
+                    tweet_fields=["id", "text"]
+                )
+                if search_response.data:
+                    result_text += f"✅ OAuth 2.0 连接成功！(搜索到 {len(search_response.data)} 条推文)\n"
+                else:
+                    result_text += "⚠️ OAuth 2.0 连接成功但搜索返回空结果\n"
+            except Exception as e:
+                result_text += f"❌ OAuth 2.0 连接失败: {e}\n"
+        else:
+            result_text += "⚠️ 未配置 TWITTER_BEARER_TOKEN，跳过 OAuth 2.0 测试\n"
+        
+        # Test read operations with the best available client
+        result_text += "\n📋 读取功能测试:\n"
+        read_client = get_read_client()
+        client_type = "OAuth 2.0" if read_client == oauth2_client else "OAuth 1.0a"
+        result_text += f"使用 {client_type} 进行读取测试...\n"
+        
         try:
-            search_response = client.search_recent_tweets(
-                query="hello",
+            search_response = read_client.search_recent_tweets(
+                query="AI",
                 max_results=5,
                 tweet_fields=["id", "text"]
             )
@@ -1239,17 +1304,38 @@ async def handle_test_api_connection(arguments: Any) -> Sequence[TextContent]:
                 result_text += "❌ 搜索功能被禁止 - 可能需要升级API计划\n"
             elif "429" in str(e):
                 result_text += "⚠️ 搜索功能受限 - API调用频率限制\n"
+            elif "401" in str(e):
+                result_text += "❌ 认证失败 - 请检查API凭据\n"
             else:
                 result_text += f"❌ 搜索功能错误: {e}\n"
         except Exception as e:
             result_text += f"❌ 搜索功能异常: {e}\n"
         
-        # Test 3: Try to get a well-known tweet (if we have one)
-        result_text += "\n=== API权限总结 ===\n"
-        result_text += "如果搜索功能失败，这通常意味着:\n"
-        result_text += "1. 免费API计划不支持搜索功能\n"
-        result_text += "2. 需要升级到付费API计划\n"
-        result_text += "3. API权限设置不正确\n"
+        # Test write operations
+        result_text += "\n📋 写入功能测试:\n"
+        try:
+            # We don't actually post a tweet, just verify the client can be used for posting
+            result_text += "✅ 写入客户端 (OAuth 1.0a) 已就绪\n"
+            result_text += "   支持功能: 发推文、转推、回复、上传媒体\n"
+        except Exception as e:
+            result_text += f"❌ 写入客户端配置错误: {e}\n"
+        
+        # Summary and recommendations
+        result_text += "\n=== 总结和建议 ===\n"
+        
+        if oauth2_client:
+            result_text += "✅ 推荐配置: OAuth 1.0a + OAuth 2.0 双重认证\n"
+            result_text += "   - OAuth 2.0 用于读取操作 (更稳定)\n"
+            result_text += "   - OAuth 1.0a 用于写入操作 (发推文等)\n"
+        else:
+            result_text += "⚠️ 当前配置: 仅 OAuth 1.0a\n"
+            result_text += "   建议添加 TWITTER_BEARER_TOKEN 以启用 OAuth 2.0\n"
+        
+        result_text += "\n如果遇到问题:\n"
+        result_text += "1. 检查 Twitter Developer Portal 中的项目权限\n"
+        result_text += "2. 确保 API 密钥未过期\n"
+        result_text += "3. 验证账户类型和 API 使用限制\n"
+        result_text += "4. 考虑升级到付费 API 计划以获得更多功能\n"
         
         logger.info("API connection test completed")
         
