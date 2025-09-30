@@ -27,7 +27,8 @@ An MCP server to create, manage and publish X/Twitter posts directly through Cla
 - ✅ Quote tweet with comments
 - ✅ Create draft quote tweets
 - ✅ Delete drafts
-- ✅ Draft preservation on publish failure
+- ✅ Auto-delete failed drafts (configurable)
+- ✅ Draft preservation on publish failure (configurable)
 
 ### 📷 Media Support
 - ✅ Upload media files (images, videos, GIFs)
@@ -180,6 +181,21 @@ Restart gemini cli
    - Replace `/path/to/x-mcp` with your actual repository path
    - Add your X/Twitter API credentials
 
+## Advanced Configuration
+
+### Auto-Delete Failed Drafts
+
+When tweet publishing fails, you can choose whether to automatically delete drafts:
+
+- **Enable auto-delete** (default): Automatically delete drafts when publishing fails to avoid accumulating invalid drafts
+- **Disable auto-delete**: Preserve drafts when publishing fails, allowing manual retry or modification
+
+#### Configuration Methods
+
+1. **Via Environment Variable**: Add `"AUTO_DELETE_FAILED_DRAFTS": "true"` or `"false"` in your configuration file
+2. **Via Commands**: Use "Enable auto-delete failed drafts" or "Disable auto-delete failed drafts"
+3. **Check Status**: Use "Check current auto-delete configuration"
+
 ## Usage Examples
 
 Works with both Claude code and Gemini CLI:
@@ -197,6 +213,9 @@ Works with both Claude code and Gemini CLI:
 * "Upload image /path/to/image.jpg with alt text 'Beautiful sunset over the mountains'"
 * "Create tweet with media 'Check out this amazing photo!' using media IDs 123456789"
 * "Create draft tweet with media 'My latest project' and attach /path/to/video.mp4"
+* "Enable auto-delete failed drafts"
+* "Disable auto-delete failed drafts"
+* "Check current auto-delete configuration"
 * "Get tweet 1234567890 content and information"
 * "Search for tweets containing 'AI OR artificial intelligence' from the last 7 days"
 * "Get information for tweets 123456789, 987654321, 555666777"

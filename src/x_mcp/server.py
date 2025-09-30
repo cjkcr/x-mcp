@@ -22,6 +22,10 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("x_mcp")
 
+# Configuration for auto-delete drafts on publish failure
+_auto_delete_env = os.getenv("AUTO_DELETE_FAILED_DRAFTS", "true").lower()
+AUTO_DELETE_FAILED_DRAFTS = _auto_delete_env in ("true", "1", "yes", "on") if _auto_delete_env else True
+
 # Get Twitter API credentials from environment variables
 API_KEY = os.getenv("TWITTER_API_KEY")
 API_SECRET = os.getenv("TWITTER_API_SECRET")
@@ -79,6 +83,17 @@ def get_write_client():
 
 # Create the MCP server instance
 server = Server("x_mcp")
+
+def delete_draft_on_failure(draft_id: str, filepath: str) -> None:
+    """Delete draft file if auto-delete is enabled"""
+    if AUTO_DELETE_FAILED_DRAFTS:
+        try:
+            os.remove(filepath)
+            logger.info(f"Deleted draft {draft_id} due to publishing failure (auto-delete enabled)")
+        except Exception as delete_error:
+            logger.error(f"Failed to delete draft {draft_id} after publishing error: {delete_error}")
+    else:
+        logger.info(f"Draft {draft_id} preserved for retry (auto-delete disabled)")
 
 # Implement tool handlers
 @server.list_tools()
@@ -394,6 +409,127 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="get_global_trends",
+            description="Get current global trending topics on Twitter/X",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of trends to return (default: 10, max: 50)",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="get_regional_trends",
+            description="Get trending topics for a specific region/location",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "woeid": {
+                        "type": "integer",
+                        "description": "Where On Earth ID for the location (e.g., 1 for worldwide, 23424977 for US, 23424856 for Japan)",
+                    },
+                    "location_name": {
+                        "type": "string",
+                        "description": "Location name (alternative to woeid, e.g., 'United States', 'Japan', 'United Kingdom')",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of trends to return (default: 10, max: 50)",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="get_available_trend_locations",
+            description="Get list of available locations for trend queries",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
+        Tool(
+            name="get_topic_details",
+            description="Get detailed information about a specific trending topic or hashtag",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string",
+                        "description": "The trending topic or hashtag to get details for (e.g., '#AI', 'ChatGPT')",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of related tweets to return (default: 20, max: 100)",
+                        "default": 20,
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                    "include_retweets": {
+                        "type": "boolean",
+                        "description": "Whether to include retweets in results (default: false)",
+                        "default": False,
+                    },
+                },
+                "required": ["topic"],
+            },
+        ),
+        Tool(
+            name="search_trending_hashtags",
+            description="Search for trending hashtags related to a keyword",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "Keyword to search for related trending hashtags",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 10, max: 50)",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": ["keyword"],
+            },
+        ),
+        Tool(
+            name="configure_auto_delete_failed_drafts",
+            description="Configure whether to automatically delete drafts when publishing fails",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether to automatically delete drafts on publishing failure",
+                    },
+                },
+                "required": ["enabled"],
+            },
+        ),
+        Tool(
+            name="get_auto_delete_config",
+            description="Get current configuration for auto-deleting failed drafts",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
 @server.call_tool()
@@ -435,6 +571,20 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
         return await handle_search_tweets(arguments)
     elif name == "test_api_connection":
         return await handle_test_api_connection(arguments)
+    elif name == "get_global_trends":
+        return await handle_get_global_trends(arguments)
+    elif name == "get_regional_trends":
+        return await handle_get_regional_trends(arguments)
+    elif name == "get_available_trend_locations":
+        return await handle_get_available_trend_locations(arguments)
+    elif name == "get_topic_details":
+        return await handle_get_topic_details(arguments)
+    elif name == "search_trending_hashtags":
+        return await handle_search_trending_hashtags(arguments)
+    elif name == "configure_auto_delete_failed_drafts":
+        return await handle_configure_auto_delete_failed_drafts(arguments)
+    elif name == "get_auto_delete_config":
+        return await handle_get_auto_delete_config(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -645,20 +795,26 @@ async def handle_publish_draft(arguments: Any) -> Sequence[TextContent]:
                 # If thread publishing fails partway through, log which tweets were published
                 if published_tweet_ids:
                     logger.error(f"Thread publishing failed after {len(published_tweet_ids)} tweets. Published tweet IDs: {published_tweet_ids}")
-                    raise RuntimeError(f"Thread publishing failed after {len(published_tweet_ids)} tweets. Published tweets: {published_tweet_ids}. Error: {thread_error}")
+                    # Delete the draft even if thread partially published
+                    delete_draft_on_failure(draft_id, filepath)
+                    status_msg = "Draft has been deleted." if AUTO_DELETE_FAILED_DRAFTS else "Draft preserved for retry."
+                    raise RuntimeError(f"Thread publishing failed after {len(published_tweet_ids)} tweets. Published tweets: {published_tweet_ids}. {status_msg} Error: {thread_error}")
                 else:
+                    # No tweets were published, the error will be handled by the outer exception handler
                     raise thread_error
         else:
             raise ValueError(f"Invalid draft format for {draft_id}")
             
     except tweepy.TweepError as e:
         logger.error(f"Twitter API error publishing draft {draft_id}: {e}")
-        # Draft is NOT deleted on API error - user can retry or fix the issue
-        raise RuntimeError(f"Twitter API error publishing draft {draft_id}: {e}. Draft preserved for retry.")
+        delete_draft_on_failure(draft_id, filepath)
+        status_msg = "Draft has been deleted." if AUTO_DELETE_FAILED_DRAFTS else "Draft preserved for retry."
+        raise RuntimeError(f"Twitter API error publishing draft {draft_id}: {e}. {status_msg}")
     except Exception as e:
         logger.error(f"Error publishing draft {draft_id}: {str(e)}")
-        # Draft is NOT deleted on other errors - user can retry or fix the issue
-        raise RuntimeError(f"Error publishing draft {draft_id}: {str(e)}. Draft preserved for retry.")
+        delete_draft_on_failure(draft_id, filepath)
+        status_msg = "Draft has been deleted." if AUTO_DELETE_FAILED_DRAFTS else "Draft preserved for retry."
+        raise RuntimeError(f"Error publishing draft {draft_id}: {str(e)}. {status_msg}")
 
 
 async def handle_delete_draft(arguments: Any) -> Sequence[TextContent]:
@@ -1359,6 +1515,65 @@ async def main():
             write_stream,
             server.create_initialization_options(),
         )
+
+async def handle_configure_auto_delete_failed_drafts(arguments: Any) -> Sequence[TextContent]:
+    """Configure whether to automatically delete drafts when publishing fails"""
+    if not isinstance(arguments, dict) or "enabled" not in arguments:
+        raise ValueError("Invalid arguments for configure_auto_delete_failed_drafts")
+    
+    enabled = arguments["enabled"]
+    global AUTO_DELETE_FAILED_DRAFTS
+    AUTO_DELETE_FAILED_DRAFTS = enabled
+    
+    # Also update the environment variable for persistence (if .env file exists)
+    try:
+        env_file = ".env"
+        if os.path.exists(env_file):
+            # Read existing .env content
+            with open(env_file, "r") as f:
+                lines = f.readlines()
+            
+            # Update or add the AUTO_DELETE_FAILED_DRAFTS setting
+            updated = False
+            for i, line in enumerate(lines):
+                if line.startswith("AUTO_DELETE_FAILED_DRAFTS="):
+                    lines[i] = f"AUTO_DELETE_FAILED_DRAFTS={'true' if enabled else 'false'}\n"
+                    updated = True
+                    break
+            
+            if not updated:
+                lines.append(f"AUTO_DELETE_FAILED_DRAFTS={'true' if enabled else 'false'}\n")
+            
+            # Write back to .env file
+            with open(env_file, "w") as f:
+                f.writelines(lines)
+            
+            logger.info(f"Updated .env file: AUTO_DELETE_FAILED_DRAFTS={'true' if enabled else 'false'}")
+    except Exception as e:
+        logger.warning(f"Could not update .env file: {e}")
+    
+    status = "enabled" if enabled else "disabled"
+    logger.info(f"Auto-delete failed drafts: {status}")
+    
+    return [
+        TextContent(
+            type="text",
+            text=f"Auto-delete failed drafts is now {status}. "
+                 f"{'Drafts will be automatically deleted when publishing fails.' if enabled else 'Drafts will be preserved when publishing fails for manual retry.'}"
+        )
+    ]
+
+async def handle_get_auto_delete_config(arguments: Any) -> Sequence[TextContent]:
+    """Get current configuration for auto-deleting failed drafts"""
+    status = "enabled" if AUTO_DELETE_FAILED_DRAFTS else "disabled"
+    
+    return [
+        TextContent(
+            type="text",
+            text=f"Auto-delete failed drafts is currently {status}. "
+                 f"{'Drafts will be automatically deleted when publishing fails.' if AUTO_DELETE_FAILED_DRAFTS else 'Drafts will be preserved when publishing fails for manual retry.'}"
+        )
+    ]
 
 if __name__ == "__main__":
     import asyncio
