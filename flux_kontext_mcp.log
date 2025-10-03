@@ -28,3 +28,9 @@
 2025-09-28 21:16:05,308 - flux_kontext_mcp.server - INFO - FastMCP server initialized with name: flux-kontext-pro
 2025-09-28 21:16:05,323 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
 2025-09-28 21:16:05,324 - mcp.server.lowlevel.server - INFO - Processing request of type ListResourcesRequest
+2025-09-30 17:48:40,354 - flux_kontext_mcp.server - INFO - Retrieving Replicate API token from environment
+2025-09-30 17:48:40,354 - flux_kontext_mcp.server - INFO - Replicate API token successfully retrieved
+2025-09-30 17:48:40,354 - flux_kontext_mcp.server - INFO - Replicate API token set successfully
+2025-09-30 17:48:40,356 - flux_kontext_mcp.server - INFO - FastMCP server initialized with name: flux-kontext-pro
+2025-09-30 17:48:40,376 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-09-30 17:48:40,392 - mcp.server.lowlevel.server - INFO - Processing request of type ListResourcesRequest

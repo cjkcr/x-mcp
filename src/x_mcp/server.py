@@ -1575,6 +1575,530 @@ async def handle_get_auto_delete_config(arguments: Any) -> Sequence[TextContent]
         )
     ]
 
+async def handle_get_global_trends(arguments: Any) -> Sequence[TextContent]:
+    """Get current global trending topics on Twitter/X"""
+    try:
+        limit = arguments.get("limit", 10)
+        logger.info(f"Getting global trends (limit: {limit})")
+        
+        # Get global trends using Twitter API v1.1 (trends are only available in v1.1)
+        trends = api.get_place_trends(id=1)  # WOEID 1 = worldwide
+        
+        if not trends or not trends[0].get('trends'):
+            return [
+                TextContent(
+                    type="text",
+                    text="No global trends found at this time."
+                )
+            ]
+        
+        trend_list = trends[0]['trends'][:limit]
+        
+        result = {
+            "location": "Worldwide",
+            "as_of": trends[0].get('as_of', ''),
+            "created_at": trends[0].get('created_at', ''),
+            "trends": []
+        }
+        
+        for i, trend in enumerate(trend_list, 1):
+            trend_info = {
+                "rank": i,
+                "name": trend.get('name', ''),
+                "url": trend.get('url', ''),
+                "promoted_content": trend.get('promoted_content'),
+                "query": trend.get('query', ''),
+                "tweet_volume": trend.get('tweet_volume')
+            }
+            result["trends"].append(trend_info)
+        
+        logger.info(f"Retrieved {len(result['trends'])} global trends")
+        
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(result, indent=2, ensure_ascii=False)
+            )
+        ]
+        
+    except tweepy.TweepyException as e:
+        if "403" in str(e):
+            error_msg = "Access to trends API is forbidden - may require upgraded API plan"
+        elif "429" in str(e):
+            error_msg = "Rate limit exceeded for trends API"
+        elif "401" in str(e):
+            error_msg = "Authentication failed - check API credentials"
+        else:
+            error_msg = f"Twitter API error getting global trends: {str(e)}"
+        
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"Error getting global trends: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+async def handle_get_regional_trends(arguments: Any) -> Sequence[TextContent]:
+    """Get trending topics for a specific region/location"""
+    try:
+        woeid = arguments.get("woeid")
+        location_name = arguments.get("location_name")
+        limit = arguments.get("limit", 10)
+        
+        # Location name to WOEID mapping for common locations
+        location_mapping = {
+            "united states": 23424977,
+            "usa": 23424977,
+            "us": 23424977,
+            "japan": 23424856,
+            "united kingdom": 23424975,
+            "uk": 23424975,
+            "canada": 23424775,
+            "australia": 23424748,
+            "germany": 23424829,
+            "france": 23424819,
+            "brazil": 23424768,
+            "india": 23424848,
+            "china": 23424781,
+            "south korea": 23424868,
+            "mexico": 23424900,
+            "italy": 23424853,
+            "spain": 23424950,
+            "russia": 23424936,
+            "turkey": 23424969,
+            "argentina": 23424747,
+            "worldwide": 1,
+            "global": 1
+        }
+        
+        # Determine WOEID
+        if woeid is None and location_name:
+            location_key = location_name.lower().strip()
+            woeid = location_mapping.get(location_key)
+            if woeid is None:
+                available_locations = ", ".join(location_mapping.keys())
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Location '{location_name}' not found. Available locations: {available_locations}"
+                    )
+                ]
+        elif woeid is None:
+            woeid = 1  # Default to worldwide
+        
+        logger.info(f"Getting regional trends for WOEID {woeid} (limit: {limit})")
+        
+        # Get trends for the specified location
+        trends = api.get_place_trends(id=woeid)
+        
+        if not trends or not trends[0].get('trends'):
+            return [
+                TextContent(
+                    type="text",
+                    text=f"No trends found for the specified location (WOEID: {woeid})."
+                )
+            ]
+        
+        trend_list = trends[0]['trends'][:limit]
+        location_info = trends[0].get('locations', [{}])[0]
+        
+        result = {
+            "location": {
+                "name": location_info.get('name', f'WOEID {woeid}'),
+                "woeid": location_info.get('woeid', woeid),
+                "country": location_info.get('country', ''),
+                "countryCode": location_info.get('countryCode', '')
+            },
+            "as_of": trends[0].get('as_of', ''),
+            "created_at": trends[0].get('created_at', ''),
+            "trends": []
+        }
+        
+        for i, trend in enumerate(trend_list, 1):
+            trend_info = {
+                "rank": i,
+                "name": trend.get('name', ''),
+                "url": trend.get('url', ''),
+                "promoted_content": trend.get('promoted_content'),
+                "query": trend.get('query', ''),
+                "tweet_volume": trend.get('tweet_volume')
+            }
+            result["trends"].append(trend_info)
+        
+        logger.info(f"Retrieved {len(result['trends'])} trends for {result['location']['name']}")
+        
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(result, indent=2, ensure_ascii=False)
+            )
+        ]
+        
+    except tweepy.TweepyException as e:
+        if "403" in str(e):
+            error_msg = "Access to trends API is forbidden - may require upgraded API plan"
+        elif "429" in str(e):
+            error_msg = "Rate limit exceeded for trends API"
+        elif "401" in str(e):
+            error_msg = "Authentication failed - check API credentials"
+        elif "404" in str(e):
+            error_msg = f"Location not found (WOEID: {woeid})"
+        else:
+            error_msg = f"Twitter API error getting regional trends: {str(e)}"
+        
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"Error getting regional trends: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+async def handle_get_available_trend_locations(arguments: Any) -> Sequence[TextContent]:
+    """Get list of available locations for trend queries"""
+    try:
+        logger.info("Getting available trend locations")
+        
+        # Get available trend locations
+        locations = api.available_trends()
+        
+        if not locations:
+            return [
+                TextContent(
+                    type="text",
+                    text="No trend locations available."
+                )
+            ]
+        
+        # Group locations by country
+        countries = {}
+        for location in locations:
+            country = location.get('country', 'Unknown')
+            country_code = location.get('countryCode', '')
+            
+            if country not in countries:
+                countries[country] = {
+                    "country": country,
+                    "countryCode": country_code,
+                    "locations": []
+                }
+            
+            countries[country]["locations"].append({
+                "name": location.get('name', ''),
+                "woeid": location.get('woeid', ''),
+                "placeType": location.get('placeType', {})
+            })
+        
+        # Sort countries and locations
+        sorted_countries = []
+        for country_name in sorted(countries.keys()):
+            country_data = countries[country_name]
+            country_data["locations"].sort(key=lambda x: x["name"])
+            sorted_countries.append(country_data)
+        
+        result = {
+            "total_locations": len(locations),
+            "countries": sorted_countries
+        }
+        
+        logger.info(f"Retrieved {len(locations)} available trend locations across {len(countries)} countries")
+        
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(result, indent=2, ensure_ascii=False)
+            )
+        ]
+        
+    except tweepy.TweepyException as e:
+        if "403" in str(e):
+            error_msg = "Access to trends API is forbidden - may require upgraded API plan"
+        elif "429" in str(e):
+            error_msg = "Rate limit exceeded for trends API"
+        elif "401" in str(e):
+            error_msg = "Authentication failed - check API credentials"
+        else:
+            error_msg = f"Twitter API error getting available trend locations: {str(e)}"
+        
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"Error getting available trend locations: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+async def handle_get_topic_details(arguments: Any) -> Sequence[TextContent]:
+    """Get detailed information about a specific trending topic or hashtag"""
+    try:
+        topic = arguments["topic"]
+        max_results = arguments.get("max_results", 20)
+        include_retweets = arguments.get("include_retweets", False)
+        
+        logger.info(f"Getting topic details for '{topic}' (max_results: {max_results}, include_retweets: {include_retweets})")
+        
+        # Build search query
+        search_query = topic
+        if not include_retweets:
+            search_query += " -is:retweet"
+        
+        # Search for tweets about the topic
+        read_client = get_read_client()
+        response = read_client.search_recent_tweets(
+            query=search_query,
+            max_results=min(max_results, 100),
+            tweet_fields=["id", "text", "author_id", "created_at", "public_metrics", "context_annotations", "entities"],
+            user_fields=["id", "name", "username", "verified", "public_metrics"],
+            expansions=["author_id"]
+        )
+        
+        if not response.data:
+            return [
+                TextContent(
+                    type="text",
+                    text=f"No recent tweets found for topic: {topic}"
+                )
+            ]
+        
+        # Process users data
+        users_dict = {}
+        if response.includes and response.includes.get('users'):
+            for user in response.includes['users']:
+                users_dict[user.id] = {
+                    "name": user.name,
+                    "username": user.username,
+                    "verified": getattr(user, 'verified', False),
+                    "followers_count": user.public_metrics.get('followers_count', 0) if user.public_metrics else 0,
+                    "following_count": user.public_metrics.get('following_count', 0) if user.public_metrics else 0
+                }
+        
+        # Process tweets
+        tweets = []
+        total_engagement = 0
+        hashtags = {}
+        mentions = {}
+        
+        for tweet in response.data:
+            author_info = users_dict.get(tweet.author_id, {})
+            
+            # Calculate engagement
+            metrics = tweet.public_metrics or {}
+            engagement = (metrics.get('like_count', 0) + 
+                         metrics.get('retweet_count', 0) + 
+                         metrics.get('reply_count', 0) + 
+                         metrics.get('quote_count', 0))
+            total_engagement += engagement
+            
+            # Extract hashtags and mentions
+            if hasattr(tweet, 'entities') and tweet.entities:
+                if tweet.entities.get('hashtags'):
+                    for hashtag in tweet.entities['hashtags']:
+                        tag = hashtag['tag'].lower()
+                        hashtags[tag] = hashtags.get(tag, 0) + 1
+                
+                if tweet.entities.get('mentions'):
+                    for mention in tweet.entities['mentions']:
+                        username = mention['username'].lower()
+                        mentions[username] = mentions.get(username, 0) + 1
+            
+            tweet_info = {
+                "id": tweet.id,
+                "text": tweet.text,
+                "created_at": tweet.created_at.isoformat() if tweet.created_at else None,
+                "author": {
+                    "id": tweet.author_id,
+                    "name": author_info.get("name", ""),
+                    "username": author_info.get("username", ""),
+                    "verified": author_info.get("verified", False),
+                    "followers_count": author_info.get("followers_count", 0)
+                },
+                "metrics": {
+                    "like_count": metrics.get('like_count', 0),
+                    "retweet_count": metrics.get('retweet_count', 0),
+                    "reply_count": metrics.get('reply_count', 0),
+                    "quote_count": metrics.get('quote_count', 0),
+                    "engagement": engagement
+                }
+            }
+            tweets.append(tweet_info)
+        
+        # Sort tweets by engagement
+        tweets.sort(key=lambda x: x['metrics']['engagement'], reverse=True)
+        
+        # Get top hashtags and mentions
+        top_hashtags = sorted(hashtags.items(), key=lambda x: x[1], reverse=True)[:10]
+        top_mentions = sorted(mentions.items(), key=lambda x: x[1], reverse=True)[:10]
+        
+        result = {
+            "topic": topic,
+            "search_query": search_query,
+            "summary": {
+                "total_tweets": len(tweets),
+                "total_engagement": total_engagement,
+                "average_engagement": round(total_engagement / len(tweets), 2) if tweets else 0,
+                "search_timestamp": datetime.now().isoformat()
+            },
+            "top_hashtags": [{"hashtag": f"#{tag}", "count": count} for tag, count in top_hashtags],
+            "top_mentions": [{"username": f"@{username}", "count": count} for username, count in top_mentions],
+            "tweets": tweets
+        }
+        
+        logger.info(f"Retrieved details for topic '{topic}': {len(tweets)} tweets, {total_engagement} total engagement")
+        
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(result, indent=2, ensure_ascii=False)
+            )
+        ]
+        
+    except tweepy.TweepyException as e:
+        if "403" in str(e):
+            error_msg = "Access to search API is forbidden - may require upgraded API plan"
+        elif "429" in str(e):
+            error_msg = "Rate limit exceeded for search API"
+        elif "401" in str(e):
+            error_msg = "Authentication failed - check API credentials"
+        else:
+            error_msg = f"Twitter API error getting topic details: {str(e)}"
+        
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"Error getting topic details: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+async def handle_search_trending_hashtags(arguments: Any) -> Sequence[TextContent]:
+    """Search for trending hashtags related to a keyword"""
+    try:
+        keyword = arguments["keyword"]
+        max_results = arguments.get("max_results", 10)
+        
+        logger.info(f"Searching trending hashtags for keyword '{keyword}' (max_results: {max_results})")
+        
+        # Search for tweets containing the keyword to find related hashtags
+        read_client = get_read_client()
+        response = read_client.search_recent_tweets(
+            query=f"{keyword} has:hashtags -is:retweet",
+            max_results=100,  # Get more tweets to analyze hashtags
+            tweet_fields=["id", "text", "entities", "public_metrics", "created_at"],
+            expansions=["author_id"]
+        )
+        
+        if not response.data:
+            return [
+                TextContent(
+                    type="text",
+                    text=f"No recent tweets with hashtags found for keyword: {keyword}"
+                )
+            ]
+        
+        # Extract and count hashtags
+        hashtag_stats = {}
+        total_tweets = len(response.data)
+        
+        for tweet in response.data:
+            if hasattr(tweet, 'entities') and tweet.entities and tweet.entities.get('hashtags'):
+                tweet_engagement = 0
+                if tweet.public_metrics:
+                    tweet_engagement = (tweet.public_metrics.get('like_count', 0) + 
+                                      tweet.public_metrics.get('retweet_count', 0) + 
+                                      tweet.public_metrics.get('reply_count', 0) + 
+                                      tweet.public_metrics.get('quote_count', 0))
+                
+                for hashtag in tweet.entities['hashtags']:
+                    tag = hashtag['tag'].lower()
+                    if tag not in hashtag_stats:
+                        hashtag_stats[tag] = {
+                            "hashtag": f"#{hashtag['tag']}",
+                            "count": 0,
+                            "total_engagement": 0,
+                            "tweets": []
+                        }
+                    
+                    hashtag_stats[tag]["count"] += 1
+                    hashtag_stats[tag]["total_engagement"] += tweet_engagement
+                    
+                    # Store sample tweet info
+                    if len(hashtag_stats[tag]["tweets"]) < 3:
+                        hashtag_stats[tag]["tweets"].append({
+                            "id": tweet.id,
+                            "text": tweet.text[:100] + "..." if len(tweet.text) > 100 else tweet.text,
+                            "engagement": tweet_engagement,
+                            "created_at": tweet.created_at.isoformat() if tweet.created_at else None
+                        })
+        
+        if not hashtag_stats:
+            return [
+                TextContent(
+                    type="text",
+                    text=f"No hashtags found in recent tweets for keyword: {keyword}"
+                )
+            ]
+        
+        # Calculate trending score (combination of frequency and engagement)
+        for tag_data in hashtag_stats.values():
+            frequency_score = tag_data["count"] / total_tweets
+            avg_engagement = tag_data["total_engagement"] / tag_data["count"] if tag_data["count"] > 0 else 0
+            # Normalize engagement (simple approach)
+            engagement_score = min(avg_engagement / 100, 1.0)  # Cap at 1.0
+            tag_data["trending_score"] = (frequency_score * 0.6) + (engagement_score * 0.4)
+            tag_data["average_engagement"] = round(avg_engagement, 2)
+        
+        # Sort by trending score and limit results
+        trending_hashtags = sorted(
+            hashtag_stats.values(), 
+            key=lambda x: x["trending_score"], 
+            reverse=True
+        )[:max_results]
+        
+        result = {
+            "keyword": keyword,
+            "analysis": {
+                "total_tweets_analyzed": total_tweets,
+                "unique_hashtags_found": len(hashtag_stats),
+                "top_hashtags_returned": len(trending_hashtags),
+                "analysis_timestamp": datetime.now().isoformat()
+            },
+            "trending_hashtags": []
+        }
+        
+        for i, hashtag_data in enumerate(trending_hashtags, 1):
+            result["trending_hashtags"].append({
+                "rank": i,
+                "hashtag": hashtag_data["hashtag"],
+                "usage_count": hashtag_data["count"],
+                "total_engagement": hashtag_data["total_engagement"],
+                "average_engagement": hashtag_data["average_engagement"],
+                "trending_score": round(hashtag_data["trending_score"], 4),
+                "sample_tweets": hashtag_data["tweets"]
+            })
+        
+        logger.info(f"Found {len(trending_hashtags)} trending hashtags for keyword '{keyword}'")
+        
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(result, indent=2, ensure_ascii=False)
+            )
+        ]
+        
+    except tweepy.TweepyException as e:
+        if "403" in str(e):
+            error_msg = "Access to search API is forbidden - may require upgraded API plan"
+        elif "429" in str(e):
+            error_msg = "Rate limit exceeded for search API"
+        elif "401" in str(e):
+            error_msg = "Authentication failed - check API credentials"
+        else:
+            error_msg = f"Twitter API error searching trending hashtags: {str(e)}"
+        
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"Error searching trending hashtags: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
