@@ -3,7 +3,7 @@ import json
 import logging
 import asyncio
 import mimetypes
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Sequence
 from dotenv import load_dotenv
 import tweepy
@@ -83,6 +83,10 @@ def get_write_client():
 
 # Create the MCP server instance
 server = Server("x_mcp")
+
+# Global variable to store the scheduled task
+_scheduled_task = None
+_scheduler_running = False
 
 def delete_draft_on_failure(draft_id: str, filepath: str) -> None:
     """Delete draft file if auto-delete is enabled"""
@@ -530,6 +534,122 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="create_scheduled_tweet",
+            description="Create a scheduled tweet to be published at a specific time",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The content of the tweet",
+                    },
+                    "scheduled_time": {
+                        "type": "string",
+                        "description": "When to publish the tweet (ISO format: YYYY-MM-DDTHH:MM:SS or relative like '+10m', '+1h', '+1d')",
+                    },
+                },
+                "required": ["content", "scheduled_time"],
+            },
+        ),
+        Tool(
+            name="create_scheduled_thread",
+            description="Create a scheduled tweet thread to be published at a specific time",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "contents": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "An array of tweet contents for the thread",
+                    },
+                    "scheduled_time": {
+                        "type": "string",
+                        "description": "When to publish the thread (ISO format: YYYY-MM-DDTHH:MM:SS or relative like '+10m', '+1h', '+1d')",
+                    },
+                },
+                "required": ["contents", "scheduled_time"],
+            },
+        ),
+        Tool(
+            name="create_recurring_tweets",
+            description="Create recurring tweets that will be published at regular intervals",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "contents": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "An array of tweet contents to be published in sequence",
+                    },
+                    "interval_minutes": {
+                        "type": "integer",
+                        "description": "Interval between tweets in minutes (e.g., 10 for every 10 minutes)",
+                        "minimum": 1,
+                    },
+                    "start_time": {
+                        "type": "string",
+                        "description": "When to start publishing (ISO format: YYYY-MM-DDTHH:MM:SS or relative like '+10m', '+1h', '+1d')",
+                    },
+                    "total_count": {
+                        "type": "integer",
+                        "description": "Total number of tweets to publish (optional, defaults to length of contents array)",
+                        "minimum": 1,
+                    },
+                },
+                "required": ["contents", "interval_minutes", "start_time"],
+            },
+        ),
+        Tool(
+            name="list_scheduled_tweets",
+            description="List all scheduled tweets and their status",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
+        Tool(
+            name="cancel_scheduled_tweet",
+            description="Cancel a scheduled tweet before it's published",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "schedule_id": {
+                        "type": "string",
+                        "description": "ID of the scheduled tweet to cancel",
+                    },
+                },
+                "required": ["schedule_id"],
+            },
+        ),
+        Tool(
+            name="start_scheduler",
+            description="Start the tweet scheduler background task",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
+        Tool(
+            name="stop_scheduler",
+            description="Stop the tweet scheduler background task",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
+        Tool(
+            name="get_scheduler_status",
+            description="Get the current status of the tweet scheduler",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
 @server.call_tool()
@@ -585,6 +705,22 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
         return await handle_configure_auto_delete_failed_drafts(arguments)
     elif name == "get_auto_delete_config":
         return await handle_get_auto_delete_config(arguments)
+    elif name == "create_scheduled_tweet":
+        return await handle_create_scheduled_tweet(arguments)
+    elif name == "create_scheduled_thread":
+        return await handle_create_scheduled_thread(arguments)
+    elif name == "create_recurring_tweets":
+        return await handle_create_recurring_tweets(arguments)
+    elif name == "list_scheduled_tweets":
+        return await handle_list_scheduled_tweets(arguments)
+    elif name == "cancel_scheduled_tweet":
+        return await handle_cancel_scheduled_tweet(arguments)
+    elif name == "start_scheduler":
+        return await handle_start_scheduler(arguments)
+    elif name == "stop_scheduler":
+        return await handle_stop_scheduler(arguments)
+    elif name == "get_scheduler_status":
+        return await handle_get_scheduler_status(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -1515,6 +1651,560 @@ async def main():
             write_stream,
             server.create_initialization_options(),
         )
+
+def parse_scheduled_time(time_str: str) -> datetime:
+    """Parse scheduled time string into datetime object"""
+    time_str = time_str.strip()
+    
+    # Handle relative time formats like '+10m', '+1h', '+1d'
+    if time_str.startswith('+'):
+        relative_str = time_str[1:]
+        now = datetime.now()
+        
+        if relative_str.endswith('m'):
+            # Minutes
+            minutes = int(relative_str[:-1])
+            return now + timedelta(minutes=minutes)
+        elif relative_str.endswith('h'):
+            # Hours
+            hours = int(relative_str[:-1])
+            return now + timedelta(hours=hours)
+        elif relative_str.endswith('d'):
+            # Days
+            days = int(relative_str[:-1])
+            return now + timedelta(days=days)
+        else:
+            raise ValueError(f"Invalid relative time format: {time_str}")
+    
+    # Handle absolute time formats
+    try:
+        # Try ISO format with seconds
+        return datetime.fromisoformat(time_str)
+    except ValueError:
+        try:
+            # Try without seconds
+            return datetime.strptime(time_str, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            try:
+                # Try date only (assume current time)
+                date_part = datetime.strptime(time_str, "%Y-%m-%d")
+                now = datetime.now()
+                return date_part.replace(hour=now.hour, minute=now.minute, second=now.second)
+            except ValueError:
+                raise ValueError(f"Invalid time format: {time_str}. Use ISO format (YYYY-MM-DDTHH:MM:SS) or relative (+10m, +1h, +1d)")
+
+async def schedule_tweet_task():
+    """Background task that checks and publishes scheduled tweets"""
+    global _scheduler_running
+    _scheduler_running = True
+    logger.info("Tweet scheduler started")
+    
+    while _scheduler_running:
+        try:
+            await check_and_publish_scheduled_tweets()
+            # Check every 30 seconds
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            logger.info("Tweet scheduler stopped")
+            _scheduler_running = False
+            break
+        except Exception as e:
+            logger.error(f"Error in tweet scheduler: {e}")
+            # Continue running even if there's an error
+            await asyncio.sleep(30)
+    
+    _scheduler_running = False
+
+async def check_and_publish_scheduled_tweets():
+    """Check for scheduled tweets that are ready to be published"""
+    if not os.path.exists("scheduled"):
+        return
+    
+    now = datetime.now()
+    
+    for filename in os.listdir("scheduled"):
+        if not filename.endswith('.json'):
+            continue
+            
+        filepath = os.path.join("scheduled", filename)
+        
+        try:
+            with open(filepath, "r") as f:
+                scheduled_item = json.load(f)
+            
+            scheduled_time = datetime.fromisoformat(scheduled_item["scheduled_time"])
+            
+            # Check if it's time to publish
+            if now >= scheduled_time:
+                await publish_scheduled_item(scheduled_item, filepath)
+                
+        except Exception as e:
+            logger.error(f"Error processing scheduled item {filename}: {e}")
+
+async def publish_scheduled_item(scheduled_item: dict, filepath: str):
+    """Publish a scheduled tweet or thread"""
+    try:
+        schedule_type = scheduled_item.get("type", "tweet")
+        
+        if schedule_type == "tweet":
+            # Single tweet
+            content = scheduled_item["content"]
+            response = get_write_client().create_tweet(text=content)
+            tweet_id = response.data['id']
+            logger.info(f"Published scheduled tweet ID {tweet_id}")
+            
+            # Remove the scheduled file
+            os.remove(filepath)
+            
+        elif schedule_type == "thread":
+            # Tweet thread
+            contents = scheduled_item["contents"]
+            published_tweet_ids = []
+            last_tweet_id = None
+            
+            for i, content in enumerate(contents):
+                if last_tweet_id is None:
+                    response = get_write_client().create_tweet(text=content)
+                else:
+                    response = get_write_client().create_tweet(text=content, in_reply_to_tweet_id=last_tweet_id)
+                last_tweet_id = response.data['id']
+                published_tweet_ids.append(last_tweet_id)
+                await asyncio.sleep(1)  # Avoid hitting rate limits
+            
+            logger.info(f"Published scheduled thread with {len(published_tweet_ids)} tweets, starting with ID {published_tweet_ids[0]}")
+            
+            # Remove the scheduled file
+            os.remove(filepath)
+            
+        elif schedule_type == "recurring":
+            # Recurring tweets
+            await handle_recurring_tweet_publication(scheduled_item, filepath)
+            
+    except Exception as e:
+        logger.error(f"Error publishing scheduled item: {e}")
+        # Move failed item to a failed directory for manual review
+        os.makedirs("scheduled/failed", exist_ok=True)
+        failed_path = os.path.join("scheduled/failed", os.path.basename(filepath))
+        os.rename(filepath, failed_path)
+
+async def handle_recurring_tweet_publication(scheduled_item: dict, filepath: str):
+    """Handle publication of recurring tweets"""
+    contents = scheduled_item["contents"]
+    current_index = scheduled_item.get("current_index", 0)
+    total_count = scheduled_item.get("total_count", len(contents))
+    published_count = scheduled_item.get("published_count", 0)
+    
+    # Check if we've published all tweets
+    if published_count >= total_count:
+        logger.info(f"Recurring tweet series completed ({published_count}/{total_count})")
+        os.remove(filepath)
+        return
+    
+    # Publish current tweet
+    content = contents[current_index % len(contents)]
+    response = get_write_client().create_tweet(text=content)
+    tweet_id = response.data['id']
+    logger.info(f"Published recurring tweet {published_count + 1}/{total_count}, ID {tweet_id}")
+    
+    # Update the scheduled item for next publication
+    scheduled_item["current_index"] = (current_index + 1) % len(contents)
+    scheduled_item["published_count"] = published_count + 1
+    
+    # Calculate next publication time
+    interval_minutes = scheduled_item["interval_minutes"]
+    next_time = datetime.now() + timedelta(minutes=interval_minutes)
+    scheduled_item["scheduled_time"] = next_time.isoformat()
+    
+    # Save updated schedule or remove if completed
+    if scheduled_item["published_count"] >= total_count:
+        os.remove(filepath)
+    else:
+        with open(filepath, "w") as f:
+            json.dump(scheduled_item, f, indent=2)
+
+async def ensure_scheduler_running():
+    """Ensure the scheduler is running, start it if not"""
+    global _scheduled_task, _scheduler_running
+    
+    if not _scheduler_running and (_scheduled_task is None or _scheduled_task.done()):
+        logger.info("Auto-starting tweet scheduler...")
+        _scheduled_task = asyncio.create_task(schedule_tweet_task())
+        return True
+    return False
+
+async def handle_create_scheduled_tweet(arguments: Any) -> Sequence[TextContent]:
+    """Create a scheduled tweet"""
+    if not isinstance(arguments, dict) or "content" not in arguments or "scheduled_time" not in arguments:
+        raise ValueError("Invalid arguments for create_scheduled_tweet")
+    
+    content = arguments["content"]
+    scheduled_time_str = arguments["scheduled_time"]
+    
+    try:
+        # Parse the scheduled time
+        scheduled_time = parse_scheduled_time(scheduled_time_str)
+        
+        # Check if the time is in the future
+        if scheduled_time <= datetime.now():
+            raise ValueError("Scheduled time must be in the future")
+        
+        # Create scheduled tweet data
+        scheduled_tweet = {
+            "type": "tweet",
+            "content": content,
+            "scheduled_time": scheduled_time.isoformat(),
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # Ensure scheduled directory exists
+        os.makedirs("scheduled", exist_ok=True)
+        
+        # Save the scheduled tweet
+        schedule_id = f"scheduled_tweet_{int(datetime.now().timestamp())}.json"
+        filepath = os.path.join("scheduled", schedule_id)
+        
+        with open(filepath, "w") as f:
+            json.dump(scheduled_tweet, f, indent=2)
+        
+        # Auto-start scheduler if not running
+        scheduler_started = await ensure_scheduler_running()
+        
+        logger.info(f"Scheduled tweet created: {schedule_id} for {scheduled_time}")
+        
+        scheduler_msg = " (Scheduler auto-started)" if scheduler_started else ""
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Scheduled tweet created with ID {schedule_id}. Will be published at {scheduled_time.strftime('%Y-%m-%d %H:%M:%S')}{scheduler_msg}",
+            )
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error creating scheduled tweet: {str(e)}")
+        raise RuntimeError(f"Error creating scheduled tweet: {str(e)}")
+
+async def handle_create_scheduled_thread(arguments: Any) -> Sequence[TextContent]:
+    """Create a scheduled tweet thread"""
+    if not isinstance(arguments, dict) or "contents" not in arguments or "scheduled_time" not in arguments:
+        raise ValueError("Invalid arguments for create_scheduled_thread")
+    
+    contents = arguments["contents"]
+    scheduled_time_str = arguments["scheduled_time"]
+    
+    if not isinstance(contents, list) or not all(isinstance(item, str) for item in contents):
+        raise ValueError("Invalid contents for create_scheduled_thread")
+    
+    try:
+        # Parse the scheduled time
+        scheduled_time = parse_scheduled_time(scheduled_time_str)
+        
+        # Check if the time is in the future
+        if scheduled_time <= datetime.now():
+            raise ValueError("Scheduled time must be in the future")
+        
+        # Create scheduled thread data
+        scheduled_thread = {
+            "type": "thread",
+            "contents": contents,
+            "scheduled_time": scheduled_time.isoformat(),
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # Ensure scheduled directory exists
+        os.makedirs("scheduled", exist_ok=True)
+        
+        # Save the scheduled thread
+        schedule_id = f"scheduled_thread_{int(datetime.now().timestamp())}.json"
+        filepath = os.path.join("scheduled", schedule_id)
+        
+        with open(filepath, "w") as f:
+            json.dump(scheduled_thread, f, indent=2)
+        
+        # Auto-start scheduler if not running
+        scheduler_started = await ensure_scheduler_running()
+        
+        logger.info(f"Scheduled thread created: {schedule_id} for {scheduled_time}")
+        
+        scheduler_msg = " (Scheduler auto-started)" if scheduler_started else ""
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Scheduled thread created with ID {schedule_id}. Will be published at {scheduled_time.strftime('%Y-%m-%d %H:%M:%S')} ({len(contents)} tweets){scheduler_msg}",
+            )
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error creating scheduled thread: {str(e)}")
+        raise RuntimeError(f"Error creating scheduled thread: {str(e)}")
+
+async def handle_create_recurring_tweets(arguments: Any) -> Sequence[TextContent]:
+    """Create recurring tweets"""
+    if not isinstance(arguments, dict) or "contents" not in arguments or "interval_minutes" not in arguments or "start_time" not in arguments:
+        raise ValueError("Invalid arguments for create_recurring_tweets")
+    
+    contents = arguments["contents"]
+    interval_minutes = arguments["interval_minutes"]
+    start_time_str = arguments["start_time"]
+    total_count = arguments.get("total_count", len(contents))
+    
+    if not isinstance(contents, list) or not all(isinstance(item, str) for item in contents):
+        raise ValueError("Invalid contents for create_recurring_tweets")
+    
+    if interval_minutes < 1:
+        raise ValueError("Interval must be at least 1 minute")
+    
+    try:
+        # Parse the start time
+        start_time = parse_scheduled_time(start_time_str)
+        
+        # Check if the time is in the future
+        if start_time <= datetime.now():
+            raise ValueError("Start time must be in the future")
+        
+        # Create recurring tweets data
+        recurring_tweets = {
+            "type": "recurring",
+            "contents": contents,
+            "interval_minutes": interval_minutes,
+            "scheduled_time": start_time.isoformat(),
+            "total_count": total_count,
+            "current_index": 0,
+            "published_count": 0,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # Ensure scheduled directory exists
+        os.makedirs("scheduled", exist_ok=True)
+        
+        # Save the recurring tweets
+        schedule_id = f"recurring_tweets_{int(datetime.now().timestamp())}.json"
+        filepath = os.path.join("scheduled", schedule_id)
+        
+        with open(filepath, "w") as f:
+            json.dump(recurring_tweets, f, indent=2)
+        
+        # Auto-start scheduler if not running
+        scheduler_started = await ensure_scheduler_running()
+        
+        logger.info(f"Recurring tweets created: {schedule_id}, starting at {start_time}")
+        
+        scheduler_msg = " (Scheduler auto-started)" if scheduler_started else ""
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Recurring tweets created with ID {schedule_id}. Will start at {start_time.strftime('%Y-%m-%d %H:%M:%S')}, publishing {total_count} tweets every {interval_minutes} minutes{scheduler_msg}",
+            )
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error creating recurring tweets: {str(e)}")
+        raise RuntimeError(f"Error creating recurring tweets: {str(e)}")
+
+async def handle_list_scheduled_tweets(arguments: Any) -> Sequence[TextContent]:
+    """List all scheduled tweets"""
+    try:
+        scheduled_items = []
+        
+        if os.path.exists("scheduled"):
+            for filename in os.listdir("scheduled"):
+                if filename.endswith('.json'):
+                    filepath = os.path.join("scheduled", filename)
+                    try:
+                        with open(filepath, "r") as f:
+                            scheduled_item = json.load(f)
+                        
+                        # Add status information
+                        scheduled_time = datetime.fromisoformat(scheduled_item["scheduled_time"])
+                        now = datetime.now()
+                        
+                        if now >= scheduled_time:
+                            status = "ready_to_publish"
+                        else:
+                            time_diff = scheduled_time - now
+                            if time_diff.total_seconds() < 3600:  # Less than 1 hour
+                                status = f"publishing_in_{int(time_diff.total_seconds() / 60)}_minutes"
+                            else:
+                                status = f"scheduled_for_{scheduled_time.strftime('%Y-%m-%d_%H:%M')}"
+                        
+                        scheduled_items.append({
+                            "id": filename,
+                            "scheduled_item": scheduled_item,
+                            "status": status,
+                            "scheduled_time_formatted": scheduled_time.strftime('%Y-%m-%d %H:%M:%S')
+                        })
+                    except Exception as e:
+                        logger.error(f"Error reading scheduled item {filename}: {e}")
+        
+        # Sort by scheduled time
+        scheduled_items.sort(key=lambda x: x["scheduled_item"]["scheduled_time"])
+        
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(scheduled_items, indent=2, ensure_ascii=False),
+            )
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error listing scheduled tweets: {str(e)}")
+        raise RuntimeError(f"Error listing scheduled tweets: {str(e)}")
+
+async def handle_cancel_scheduled_tweet(arguments: Any) -> Sequence[TextContent]:
+    """Cancel a scheduled tweet"""
+    if not isinstance(arguments, dict) or "schedule_id" not in arguments:
+        raise ValueError("Invalid arguments for cancel_scheduled_tweet")
+    
+    schedule_id = arguments["schedule_id"]
+    filepath = os.path.join("scheduled", schedule_id)
+    
+    try:
+        if not os.path.exists(filepath):
+            raise ValueError(f"Scheduled tweet {schedule_id} does not exist")
+        
+        # Read the scheduled item before deleting
+        with open(filepath, "r") as f:
+            scheduled_item = json.load(f)
+        
+        # Delete the scheduled item
+        os.remove(filepath)
+        
+        logger.info(f"Cancelled scheduled tweet: {schedule_id}")
+        
+        schedule_type = scheduled_item.get("type", "tweet")
+        scheduled_time = datetime.fromisoformat(scheduled_item["scheduled_time"])
+        
+        return [
+            TextContent(
+                type="text",
+                text=f"Successfully cancelled scheduled {schedule_type} {schedule_id} (was scheduled for {scheduled_time.strftime('%Y-%m-%d %H:%M:%S')})",
+            )
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error cancelling scheduled tweet {schedule_id}: {str(e)}")
+        raise RuntimeError(f"Error cancelling scheduled tweet {schedule_id}: {str(e)}")
+
+async def handle_start_scheduler(arguments: Any) -> Sequence[TextContent]:
+    """Start the tweet scheduler background task"""
+    global _scheduled_task, _scheduler_running
+    
+    try:
+        if _scheduler_running:
+            return [
+                TextContent(
+                    type="text",
+                    text="Tweet scheduler is already running",
+                )
+            ]
+        
+        # Start the scheduler task
+        _scheduled_task = asyncio.create_task(schedule_tweet_task())
+        
+        logger.info("Tweet scheduler started manually")
+        
+        return [
+            TextContent(
+                type="text",
+                text="Tweet scheduler started successfully. It will check for scheduled tweets every 30 seconds.",
+            )
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error starting scheduler: {str(e)}")
+        raise RuntimeError(f"Error starting scheduler: {str(e)}")
+
+async def handle_stop_scheduler(arguments: Any) -> Sequence[TextContent]:
+    """Stop the tweet scheduler background task"""
+    global _scheduled_task, _scheduler_running
+    
+    try:
+        if not _scheduler_running:
+            return [
+                TextContent(
+                    type="text",
+                    text="Tweet scheduler is not running",
+                )
+            ]
+        
+        # Signal the scheduler to stop
+        _scheduler_running = False
+        
+        # Cancel the scheduler task if it exists
+        if _scheduled_task and not _scheduled_task.done():
+            _scheduled_task.cancel()
+            
+            try:
+                await _scheduled_task
+            except asyncio.CancelledError:
+                pass
+        
+        _scheduled_task = None
+        
+        logger.info("Tweet scheduler stopped")
+        
+        return [
+            TextContent(
+                type="text",
+                text="Tweet scheduler stopped successfully",
+            )
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error stopping scheduler: {str(e)}")
+        raise RuntimeError(f"Error stopping scheduler: {str(e)}")
+
+async def handle_get_scheduler_status(arguments: Any) -> Sequence[TextContent]:
+    """Get the current status of the tweet scheduler"""
+    global _scheduled_task, _scheduler_running
+    
+    try:
+        status_info = {
+            "scheduler_running": _scheduler_running,
+            "task_exists": _scheduled_task is not None,
+            "task_done": _scheduled_task.done() if _scheduled_task else None,
+            "scheduled_tweets_count": 0,
+            "ready_to_publish_count": 0
+        }
+        
+        # Count scheduled tweets
+        if os.path.exists("scheduled"):
+            now = datetime.now()
+            for filename in os.listdir("scheduled"):
+                if filename.endswith('.json'):
+                    filepath = os.path.join("scheduled", filename)
+                    try:
+                        with open(filepath, "r") as f:
+                            scheduled_item = json.load(f)
+                        
+                        status_info["scheduled_tweets_count"] += 1
+                        
+                        scheduled_time = datetime.fromisoformat(scheduled_item["scheduled_time"])
+                        if now >= scheduled_time:
+                            status_info["ready_to_publish_count"] += 1
+                    except Exception:
+                        continue
+        
+        status_text = f"""Tweet Scheduler Status:
+- Running: {'Yes' if _scheduler_running else 'No'}
+- Background Task: {'Active' if _scheduled_task and not _scheduled_task.done() else 'Inactive'}
+- Scheduled Tweets: {status_info['scheduled_tweets_count']}
+- Ready to Publish: {status_info['ready_to_publish_count']}
+
+{'✅ Scheduler is actively monitoring and will publish tweets automatically' if _scheduler_running else '⚠️ Scheduler is stopped - tweets will not be published automatically'}"""
+        
+        return [
+            TextContent(
+                type="text",
+                text=status_text,
+            )
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error getting scheduler status: {str(e)}")
+        raise RuntimeError(f"Error getting scheduler status: {str(e)}")
 
 async def handle_configure_auto_delete_failed_drafts(arguments: Any) -> Sequence[TextContent]:
     """Configure whether to automatically delete drafts when publishing fails"""

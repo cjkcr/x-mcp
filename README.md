@@ -30,6 +30,15 @@ An MCP server to create, manage and publish X/Twitter posts directly through Cla
 - ✅ Auto-delete failed drafts (configurable)
 - ✅ Draft preservation on publish failure (configurable)
 
+### ⏰ Scheduled Tweets (NEW!)
+- ✅ **Schedule single tweets** - Publish tweets at specific times
+- ✅ **Schedule tweet threads** - Publish complete threads at specific times
+- ✅ **Recurring tweets** - Publish tweets at regular intervals
+- ✅ **Flexible time formats** - Support absolute time (2024-01-15T14:30:00) and relative time (+10m, +2h, +1d)
+- ✅ **Background scheduler** - Automatic execution without manual intervention
+- ✅ **Schedule management** - View, cancel, and manage all scheduled tweets
+- ✅ **Smart intervals** - Perfect for regular content publishing and campaigns
+
 ### 📷 Media Support
 - ✅ Upload media files (images, videos, GIFs)
 - ✅ Create tweets with media attachments
@@ -200,6 +209,7 @@ When tweet publishing fails, you can choose whether to automatically delete draf
 
 Works with both Claude code and Gemini CLI:
 
+### Basic Tweet Operations
 * "Tweet 'Just learned how to tweet through AI - mind blown! 🤖✨'"
 * "Create a thread about the history of pizza"
 * "Show me my draft tweets"
@@ -210,12 +220,29 @@ Works with both Claude code and Gemini CLI:
 * "Retweet tweet 1234567890"
 * "Quote tweet 1234567890 with comment 'This is exactly what I was thinking!'"
 * "Create a draft quote tweet for 1234567890 with comment 'Amazing insight here'"
+
+### Media Operations
 * "Upload image /path/to/image.jpg with alt text 'Beautiful sunset over the mountains'"
 * "Create tweet with media 'Check out this amazing photo!' using media IDs 123456789"
 * "Create draft tweet with media 'My latest project' and attach /path/to/video.mp4"
+
+### Scheduled Tweets (NEW!)
+* "Schedule a tweet 'Good morning everyone! ☀️' for tomorrow at 9 AM"
+* "Create a scheduled thread about productivity tips for next Monday at 2 PM"
+* "Set up recurring tweets every 10 minutes starting in 5 minutes: ['Tip 1: Stay hydrated', 'Tip 2: Take breaks', 'Tip 3: Exercise regularly']"
+* "Schedule tweet 'Weekend vibes! 🎉' for +2h"
+* "Create recurring tweets every 30 minutes for the next 3 hours with motivational quotes"
+* "List all my scheduled tweets"
+* "Cancel scheduled tweet scheduled_tweet_1234567890.json"
+* "Start the tweet scheduler"
+* "Stop the tweet scheduler"
+
+### Configuration & Management
 * "Enable auto-delete failed drafts"
 * "Disable auto-delete failed drafts"
 * "Check current auto-delete configuration"
+
+### Tweet Retrieval
 * "Get tweet 1234567890 content and information"
 * "Search for tweets containing 'AI OR artificial intelligence' from the last 7 days"
 * "Get information for tweets 123456789, 987654321, 555666777"
@@ -325,6 +352,7 @@ python test_tweet_functions.py
 This project is based on the excellent work by [Vidhu Panhavoor Vasudevan](https://github.com/vidhupv) in the original [x-mcp](https://github.com/vidhupv/x-mcp) repository. 
 
 ### What's New in This Fork
+- 🆕 **Scheduled Tweets System** - Schedule single tweets, threads, and recurring tweets with flexible timing
 - 🆕 **OAuth Dual Authentication System** - Support for OAuth 1.0a + OAuth 2.0, automatic selection of best authentication method
 - 🆕 **401 Error Fix** - Resolved authentication issues when retrieving tweets
 - 🆕 **Smart Client Selection** - Read operations prefer OAuth 2.0, write operations use OAuth 1.0a
@@ -341,6 +369,8 @@ Special thanks to the original author for creating the foundation of this MCP se
 ## Detailed Documentation
 
 For more detailed functionality descriptions and usage guides, please refer to:
+- **[Scheduled Tweets Functionality](SCHEDULED_TWEETS_FUNCTIONALITY.md)** - 🆕 Complete guide to scheduled tweets feature
+- **[定时发推文功能说明](定时发推文功能说明.md)** - 🆕 Chinese version of scheduled tweets guide
 - **[OAuth Dual Authentication Setup Guide](OAuth_Dual_Authentication_Setup_Guide.md)** - 🆕 Detailed dual authentication setup guide
 - [OAuth双重认证配置指南](OAuth双重认证配置指南.md) - Chinese version of the setup guide
 - [推文获取功能故障排除指南](推文获取功能故障排除指南.md) - Chinese troubleshooting guide
