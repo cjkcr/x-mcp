@@ -13,6 +13,7 @@ The new scheduled tweets functionality allows you to:
 - **Background Auto-Execution**: Scheduler automatically starts when you create scheduled tweets
 - **No Manual Intervention**: Once set up, the system handles all publishing automatically
 - **Smart Error Handling**: Failed publications are automatically logged and moved to failed directory
+- **Concurrent Creation Safe**: Supports AI rapid batch creation, each tweet has unique ID to prevent file overwrites
 
 ## Features
 

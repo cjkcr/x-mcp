@@ -3,6 +3,7 @@ import json
 import logging
 import asyncio
 import mimetypes
+import uuid
 from datetime import datetime, timedelta
 from typing import Any, Sequence
 from dotenv import load_dotenv
@@ -87,6 +88,18 @@ server = Server("x_mcp")
 # Global variable to store the scheduled task
 _scheduled_task = None
 _scheduler_running = False
+
+def generate_unique_schedule_id(prefix: str) -> str:
+    """Generate a unique schedule ID using timestamp and UUID"""
+    timestamp = int(datetime.now().timestamp() * 1000)  # Use milliseconds for more precision
+    unique_suffix = str(uuid.uuid4())[:8]  # Use first 8 characters of UUID
+    return f"{prefix}_{timestamp}_{unique_suffix}.json"
+
+def generate_unique_draft_id(prefix: str) -> str:
+    """Generate a unique draft ID using timestamp and UUID"""
+    timestamp = int(datetime.now().timestamp() * 1000)  # Use milliseconds for more precision
+    unique_suffix = str(uuid.uuid4())[:8]  # Use first 8 characters of UUID
+    return f"{prefix}_{timestamp}_{unique_suffix}.json"
 
 def delete_draft_on_failure(draft_id: str, filepath: str) -> None:
     """Delete draft file if auto-delete is enabled"""
@@ -734,7 +747,7 @@ async def handle_create_draft_tweet(arguments: Any) -> Sequence[TextContent]:
         # Ensure drafts directory exists
         os.makedirs("drafts", exist_ok=True)
         # Save the draft to a file
-        draft_id = f"draft_{int(datetime.now().timestamp())}.json"
+        draft_id = generate_unique_draft_id("draft")
         with open(os.path.join("drafts", draft_id), "w") as f:
             json.dump(draft, f, indent=2)
         logger.info(f"Draft tweet created: {draft_id}")
@@ -759,7 +772,7 @@ async def handle_create_draft_thread(arguments: Any) -> Sequence[TextContent]:
         # Ensure drafts directory exists
         os.makedirs("drafts", exist_ok=True)
         # Save the draft to a file
-        draft_id = f"thread_draft_{int(datetime.now().timestamp())}.json"
+        draft_id = generate_unique_draft_id("thread_draft")
         with open(os.path.join("drafts", draft_id), "w") as f:
             json.dump(draft, f, indent=2)
         logger.info(f"Draft thread created: {draft_id}")
@@ -997,7 +1010,7 @@ async def handle_create_draft_reply(arguments: Any) -> Sequence[TextContent]:
         os.makedirs("drafts", exist_ok=True)
         
         # Save the draft to a file
-        draft_id = f"reply_draft_{int(datetime.now().timestamp())}.json"
+        draft_id = generate_unique_draft_id("reply_draft")
         with open(os.path.join("drafts", draft_id), "w") as f:
             json.dump(draft, f, indent=2)
         
@@ -1112,7 +1125,7 @@ async def handle_create_draft_quote_tweet(arguments: Any) -> Sequence[TextConten
         os.makedirs("drafts", exist_ok=True)
         
         # Save the draft to a file
-        draft_id = f"quote_draft_{int(datetime.now().timestamp())}.json"
+        draft_id = generate_unique_draft_id("quote_draft")
         with open(os.path.join("drafts", draft_id), "w") as f:
             json.dump(draft, f, indent=2)
         
@@ -1232,7 +1245,7 @@ async def handle_create_draft_tweet_with_media(arguments: Any) -> Sequence[TextC
         os.makedirs("drafts", exist_ok=True)
         
         # Save the draft to a file
-        draft_id = f"media_draft_{int(datetime.now().timestamp())}.json"
+        draft_id = generate_unique_draft_id("media_draft")
         with open(os.path.join("drafts", draft_id), "w") as f:
             json.dump(draft, f, indent=2)
         
@@ -1860,7 +1873,7 @@ async def handle_create_scheduled_tweet(arguments: Any) -> Sequence[TextContent]
         os.makedirs("scheduled", exist_ok=True)
         
         # Save the scheduled tweet
-        schedule_id = f"scheduled_tweet_{int(datetime.now().timestamp())}.json"
+        schedule_id = generate_unique_schedule_id("scheduled_tweet")
         filepath = os.path.join("scheduled", schedule_id)
         
         with open(filepath, "w") as f:
@@ -1915,7 +1928,7 @@ async def handle_create_scheduled_thread(arguments: Any) -> Sequence[TextContent
         os.makedirs("scheduled", exist_ok=True)
         
         # Save the scheduled thread
-        schedule_id = f"scheduled_thread_{int(datetime.now().timestamp())}.json"
+        schedule_id = generate_unique_schedule_id("scheduled_thread")
         filepath = os.path.join("scheduled", schedule_id)
         
         with open(filepath, "w") as f:
@@ -1979,7 +1992,7 @@ async def handle_create_recurring_tweets(arguments: Any) -> Sequence[TextContent
         os.makedirs("scheduled", exist_ok=True)
         
         # Save the recurring tweets
-        schedule_id = f"recurring_tweets_{int(datetime.now().timestamp())}.json"
+        schedule_id = generate_unique_schedule_id("recurring_tweets")
         filepath = os.path.join("scheduled", schedule_id)
         
         with open(filepath, "w") as f:
