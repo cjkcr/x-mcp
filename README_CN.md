@@ -64,6 +64,48 @@
   <img width="380" height="200" src="https://glama.ai/mcp/servers/jsxr09dktf/badge" alt="X(Twitter) Server MCP server" />
 </a>
 
+## 环境要求
+
+在开始安装之前，请确保您的系统满足以下要求：
+
+### 必需软件
+- **Python 3.8+** - 项目运行环境
+- **Node.js 16+** - 用于安装 Gemini CLI（如果使用 Gemini）
+- **UV** - Python 包管理器（推荐）或 pip
+- **Git** - 用于克隆项目
+
+### 安装前置条件
+
+**macOS 用户：**
+```bash
+# 安装 Homebrew（如果还没有）
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 安装必需软件
+brew install python node git uv
+```
+
+**Windows 用户：**
+```bash
+# 使用 Chocolatey 安装（推荐）
+choco install python nodejs git
+
+# 然后安装 UV
+pip install uv
+```
+
+**Linux 用户：**
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install python3 python3-pip nodejs npm git
+pip3 install uv
+
+# CentOS/RHEL
+sudo yum install python3 python3-pip nodejs npm git
+pip3 install uv
+```
+
 ## 快速设置
 
 ### 通过 Smithery 安装
@@ -76,21 +118,58 @@ npx -y @smithery/cli install x-mcp --client claude
 
 ### Claude code 手动安装
 
-1. **克隆仓库：**
+#### 1. 项目设置
+
+**克隆项目并设置环境：**
 ```bash
+# 克隆仓库
 git clone https://github.com/yourusername/x-mcp.git
-```
+cd x-mcp
 
-2. **使用 Homebrew 在终端中全局安装 UV：**
-```bash
+# 安装 UV（Python 包管理器）
+# macOS 用户（推荐）：
 brew install uv
+
+# 或者使用 pip：
+pip install uv
 ```
 
-3. **创建 claude_desktop_config.json：**
+**安装依赖（选择其中一种方式）：**
+
+**方式一：自动创建环境并安装（推荐）**
+```bash
+# 一步完成：创建虚拟环境并安装依赖
+uv sync
+
+# 激活虚拟环境（如果需要手动操作）
+# macOS/Linux：
+source .venv/bin/activate
+# Windows：
+# .venv\Scripts\activate
+```
+
+**方式二：手动创建环境并安装**
+```bash
+# 手动创建虚拟环境
+uv venv
+
+# 激活虚拟环境
+# macOS/Linux：
+source .venv/bin/activate
+# Windows：
+# .venv\Scripts\activate
+
+# 根据 pyproject.toml 安装依赖
+uv pip sync pyproject.toml
+```
+
+#### 2. 配置 Claude Desktop
+
+**创建 claude_desktop_config.json：**
    - **macOS 系统：** 打开目录 `~/Library/Application Support/Claude/` 并在其中创建文件
    - **Windows 系统：** 打开目录 `%APPDATA%/Claude/` 并在其中创建文件
 
-4. **将此配置添加到 claude_desktop_config.json：**
+**将此配置添加到 claude_desktop_config.json：**
 
 #### 基础配置（仅OAuth 1.0a）
 ```json
@@ -141,32 +220,115 @@ brew install uv
 
 > **💡 推荐使用双重认证配置**：添加`TWITTER_BEARER_TOKEN`可以显著提高推文获取功能的稳定性和成功率。
 
-5. **获取您的 X/Twitter API 凭据：**
+#### 3. 获取 X/Twitter API 凭据
+
+1. **访问 X API 开发者门户：**
    - 前往 [X API 开发者门户](https://developer.x.com/en/products/x-api)
-   - 创建一个项目
-   - 在用户身份验证设置中：设置为读写权限，Web 应用类型
-   - 将回调 URL 设置为 `http://localhost/`，网站 URL 设置为 `http://example.com/`
-   - 从密钥和令牌部分生成并复制所有密钥和令牌
+   - 创建开发者账户（如果还没有）
 
-6. **更新配置文件：**
-   - 将 `/path/to/x-mcp` 替换为您的实际仓库路径
-   - 添加您的 X/Twitter API 凭据
+2. **创建项目和应用：**
+   - 创建一个新项目
+   - 在项目中创建一个应用
 
-7. **完全退出 Claude 并重新打开**
+3. **配置应用权限：**
+   - 在用户身份验证设置中：设置为**读写权限**
+   - 应用类型：选择 **Web 应用**
+   - 回调 URL：设置为 `http://localhost/`
+   - 网站 URL：设置为 `http://example.com/`
+
+4. **生成API密钥和令牌：**
+   - 从"密钥和令牌"部分生成：
+     - API Key (Consumer Key)
+     - API Secret (Consumer Secret)
+     - Access Token
+     - Access Token Secret
+     - Bearer Token（推荐，用于双重认证）
+
+#### 4. 更新配置并启动
+
+**更新配置文件：**
+   - 将 `/path/to/x-mcp` 替换为您的实际项目路径（例如：`/Users/yourname/x-mcp`）
+   - 将所有 `your_*` 占位符替换为您的实际 API 凭据
+
+**完全退出 Claude 并重新打开**
+
+#### 5. 验证安装
+
+在 Claude 中测试连接：
+```
+测试API连接
+```
+
+如果一切配置正确，您应该能看到成功的连接测试结果。
 
 ### Gemini CLI 配置
 
 如果您想在 Gemini CLI 中使用此 MCP 服务器而不是 Claude code：
 
-1. **安装 Gemini CLI：**
+#### 1. 项目设置
+
+**克隆项目并设置环境：**
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/x-mcp.git
+cd x-mcp
+
+# 安装 UV（Python 包管理器）
+# macOS 用户：
+brew install uv
+
+# 或者使用 pip：
+pip install uv
+```
+
+**安装依赖（选择其中一种方式）：**
+
+**方式一：自动创建环境并安装（推荐）**
+```bash
+# 一步完成：创建虚拟环境并安装依赖
+uv sync
+
+# 激活虚拟环境（如果需要手动操作）
+# macOS/Linux：
+source .venv/bin/activate
+# Windows：
+# .venv\Scripts\activate
+```
+
+**方式二：手动创建环境并安装**
+```bash
+# 手动创建虚拟环境
+uv venv
+
+# 激活虚拟环境
+# macOS/Linux：
+source .venv/bin/activate
+# Windows：
+# .venv\Scripts\activate
+
+# 根据 pyproject.toml 安装依赖
+uv pip sync pyproject.toml
+```
+
+#### 2. 安装和配置 Gemini CLI
+
+**安装 Gemini CLI：**
 ```bash
 npm install -g @google/gemini-cli
 ```
 
-2. **创建或更新您的 MCP 配置文件：**
-   - 创建名为 `~/.gemini/settings.json` 的文件
-   - 添加以下配置：
+**创建或更新您的 MCP 配置文件：**
+```bash
+# 创建配置目录（如果不存在）
+mkdir -p ~/.gemini
 
+# 创建配置文件
+touch ~/.gemini/settings.json
+```
+
+**编辑配置文件 `~/.gemini/settings.json`：**
+
+#### 基础配置（仅OAuth 1.0a）
 ```json
 {
   "mcpServers": {
@@ -189,14 +351,77 @@ npm install -g @google/gemini-cli
 }
 ```
 
-3. **启动支持 MCP 的 Gemini CLI：**
-```bash
-重新启动gemini cli
+#### 推荐配置（OAuth 1.0a + OAuth 2.0双重认证）
+```json
+{
+  "mcpServers": {
+    "x_mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/x-mcp",
+        "run",
+        "x-mcp"
+      ],
+      "env": {
+        "TWITTER_API_KEY": "your_api_key",
+        "TWITTER_API_SECRET": "your_api_secret",
+        "TWITTER_ACCESS_TOKEN": "your_access_token",
+        "TWITTER_ACCESS_TOKEN_SECRET": "your_access_token_secret",
+        "TWITTER_BEARER_TOKEN": "your_bearer_token"
+      }
+    }
+  }
+}
 ```
 
-4. **更新配置文件：**
-   - 将 `/path/to/x-mcp` 替换为您的实际仓库路径
-   - 添加您的 X/Twitter API 凭据
+#### 3. 获取 X/Twitter API 凭据
+
+1. **访问 X API 开发者门户：**
+   - 前往 [X API 开发者门户](https://developer.x.com/en/products/x-api)
+   - 创建开发者账户（如果还没有）
+
+2. **创建项目和应用：**
+   - 创建一个新项目
+   - 在项目中创建一个应用
+
+3. **配置应用权限：**
+   - 在用户身份验证设置中：设置为**读写权限**
+   - 应用类型：选择 **Web 应用**
+   - 回调 URL：设置为 `http://localhost/`
+   - 网站 URL：设置为 `http://example.com/`
+
+4. **生成API密钥和令牌：**
+   - 从"密钥和令牌"部分生成：
+     - API Key (Consumer Key)
+     - API Secret (Consumer Secret)
+     - Access Token
+     - Access Token Secret
+     - Bearer Token（推荐，用于双重认证）
+
+#### 4. 更新配置并启动
+
+**更新配置文件：**
+- 将 `/path/to/x-mcp` 替换为您的实际项目路径（例如：`/Users/yourname/x-mcp`）
+- 将所有 `your_*` 占位符替换为您的实际 API 凭据
+
+**启动 Gemini CLI：**
+```bash
+# 启动支持 MCP 的 Gemini CLI
+gemini-cli
+
+# 或者如果需要指定配置文件路径：
+gemini-cli --config ~/.gemini/settings.json
+```
+
+#### 5. 验证安装
+
+在 Gemini CLI 中测试连接：
+```
+测试API连接
+```
+
+如果一切配置正确，您应该能看到成功的连接测试结果。
 
 ## 高级配置
 
@@ -299,6 +524,48 @@ npm install -g @google/gemini-cli
 4. 考虑升级API计划以获得完整功能
 
 ## 故障排除
+
+### 环境设置问题
+
+**UV 未找到或安装失败：**
+```bash
+# 检查 UV 是否正确安装
+which uv
+uv --version
+
+# 如果未找到，重新安装
+pip uninstall uv
+brew install uv  # macOS
+# 或
+pip install uv   # 其他系统
+```
+
+**虚拟环境问题：**
+```bash
+# 删除现有虚拟环境
+rm -rf .venv
+
+# 重新创建（选择其中一种方式）：
+
+# 方式一：自动创建并安装（推荐）
+uv sync
+
+# 方式二：手动创建并安装
+uv venv
+source .venv/bin/activate  # macOS/Linux 或 .venv\Scripts\activate (Windows)
+uv pip sync pyproject.toml
+```
+
+**Python 版本不兼容：**
+```bash
+# 检查 Python 版本（需要 3.8+）
+python --version
+python3 --version
+
+# 如果版本过低，升级 Python
+brew install python@3.11  # macOS
+# 或使用系统包管理器升级
+```
 
 ### 基本问题
 如果无法正常工作：

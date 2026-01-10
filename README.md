@@ -56,6 +56,48 @@ An MCP server to create, manage and publish X/Twitter posts directly through Cla
   <img width="380" height="200" src="https://glama.ai/mcp/servers/jsxr09dktf/badge" alt="X(Twitter) Server MCP server" />
 </a>
 
+## System Requirements
+
+Before starting the installation, please ensure your system meets the following requirements:
+
+### Required Software
+- **Python 3.8+** - Project runtime environment
+- **Node.js 16+** - For installing Gemini CLI (if using Gemini)
+- **UV** - Python package manager (recommended) or pip
+- **Git** - For cloning the project
+
+### Installing Prerequisites
+
+**macOS Users:**
+```bash
+# Install Homebrew (if you don't have it)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install required software
+brew install python node git uv
+```
+
+**Windows Users:**
+```bash
+# Using Chocolatey (recommended)
+choco install python nodejs git
+
+# Then install UV
+pip install uv
+```
+
+**Linux Users:**
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install python3 python3-pip nodejs npm git
+pip3 install uv
+
+# CentOS/RHEL
+sudo yum install python3 python3-pip nodejs npm git
+pip3 install uv
+```
+
 ## Quick Setup
 
 ### Installing via Smithery
@@ -68,21 +110,58 @@ npx -y @smithery/cli install x-mcp --client claude
 
 ### Manual Installation for Claude code
 
-1. **Clone the repository:**
+#### 1. Project Setup
+
+**Clone project and set up environment:**
 ```bash
+# Clone the repository
 git clone https://github.com/yourusername/x-mcp.git
-```
+cd x-mcp
 
-2. **Install UV globally using Homebrew in Terminal:**
-```bash
+# Install UV (Python package manager)
+# macOS users (recommended):
 brew install uv
+
+# Or use pip:
+pip install uv
 ```
 
-3. **Create claude_desktop_config.json:**
+**Install dependencies (choose one method):**
+
+**Method 1: Automatic environment creation and installation (Recommended)**
+```bash
+# One step: create virtual environment and install dependencies
+uv sync
+
+# Activate virtual environment (if manual operation needed)
+# macOS/Linux:
+source .venv/bin/activate
+# Windows:
+# .venv\Scripts\activate
+```
+
+**Method 2: Manual environment creation and installation**
+```bash
+# Manually create virtual environment
+uv venv
+
+# Activate virtual environment
+# macOS/Linux:
+source .venv/bin/activate
+# Windows:
+# .venv\Scripts\activate
+
+# Install dependencies from pyproject.toml
+uv pip sync pyproject.toml
+```
+
+#### 2. Configure Claude Desktop
+
+**Create claude_desktop_config.json:**
    - **For MacOS:** Open directory `~/Library/Application Support/Claude/` and create the file inside it
    - **For Windows:** Open directory `%APPDATA%/Claude/` and create the file inside it
 
-4. **Add this configuration to claude_desktop_config.json:**
+**Add this configuration to claude_desktop_config.json:**
 
 #### Basic Configuration (OAuth 1.0a Only)
 ```json
@@ -133,32 +212,115 @@ brew install uv
 
 > **💡 Recommended to use dual authentication configuration**: Adding `TWITTER_BEARER_TOKEN` can significantly improve the stability and success rate of tweet retrieval functions.
 
-5. **Get your X/Twitter API credentials:**
+#### 3. Get X/Twitter API Credentials
+
+1. **Visit X API Developer Portal:**
    - Go to [X API Developer Portal](https://developer.x.com/en/products/x-api)
-   - Create a project
-   - In User Authentication Settings: Set up with Read and Write permissions, Web App type
-   - Set Callback URL to `http://localhost/` and Website URL to `http://example.com/`
-   - Generate and copy all keys and tokens from Keys and Tokens section
+   - Create a developer account (if you don't have one)
 
-6. **Update the config file:**
-   - Replace `/path/to/x-mcp` with your actual repository path
-   - Add your X/Twitter API credentials
+2. **Create Project and App:**
+   - Create a new project
+   - Create an app within the project
 
-7. **Quit Claude completely and reopen it**
+3. **Configure App Permissions:**
+   - In User Authentication Settings: Set to **Read and Write permissions**
+   - App type: Select **Web App**
+   - Callback URL: Set to `http://localhost/`
+   - Website URL: Set to `http://example.com/`
+
+4. **Generate API Keys and Tokens:**
+   - From the "Keys and Tokens" section, generate:
+     - API Key (Consumer Key)
+     - API Secret (Consumer Secret)
+     - Access Token
+     - Access Token Secret
+     - Bearer Token (recommended for dual authentication)
+
+#### 4. Update Configuration and Start
+
+**Update the config file:**
+   - Replace `/path/to/x-mcp` with your actual project path (e.g., `/Users/yourname/x-mcp`)
+   - Replace all `your_*` placeholders with your actual API credentials
+
+**Quit Claude completely and reopen it**
+
+#### 5. Verify Installation
+
+Test the connection in Claude:
+```
+test api connection
+```
+
+If everything is configured correctly, you should see successful connection test results.
 
 ### Configuration for Gemini CLI
 
 If you want to use this MCP server with Gemini CLI instead of Claude code:
 
-1. **Install Gemini CLI:**
+#### 1. Project Setup
+
+**Clone project and set up environment:**
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/x-mcp.git
+cd x-mcp
+
+# Install UV (Python package manager)
+# macOS users:
+brew install uv
+
+# Or use pip:
+pip install uv
+```
+
+**Install dependencies (choose one method):**
+
+**Method 1: Automatic environment creation and installation (Recommended)**
+```bash
+# One step: create virtual environment and install dependencies
+uv sync
+
+# Activate virtual environment (if manual operation needed)
+# macOS/Linux:
+source .venv/bin/activate
+# Windows:
+# .venv\Scripts\activate
+```
+
+**Method 2: Manual environment creation and installation**
+```bash
+# Manually create virtual environment
+uv venv
+
+# Activate virtual environment
+# macOS/Linux:
+source .venv/bin/activate
+# Windows:
+# .venv\Scripts\activate
+
+# Install dependencies from pyproject.toml
+uv pip sync pyproject.toml
+```
+
+#### 2. Install and Configure Gemini CLI
+
+**Install Gemini CLI:**
 ```bash
 npm install -g @google/gemini-cli
 ```
 
-2. **Create or update your MCP configuration file:**
-   - Create a file named `~/.gemini/settings.json`
-   - Add the following configuration:
+**Create or update your MCP configuration file:**
+```bash
+# Create configuration directory (if it doesn't exist)
+mkdir -p ~/.gemini
 
+# Create configuration file
+touch ~/.gemini/settings.json
+```
+
+**Edit configuration file `~/.gemini/settings.json`:**
+
+#### Basic Configuration (OAuth 1.0a Only)
 ```json
 {
   "mcpServers": {
@@ -181,14 +343,77 @@ npm install -g @google/gemini-cli
 }
 ```
 
-3. **Start Gemini CLI with MCP support:**
-```bash
-Restart gemini cli
+#### Recommended Configuration (OAuth 1.0a + OAuth 2.0 Dual Authentication)
+```json
+{
+  "mcpServers": {
+    "x_mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/x-mcp",
+        "run",
+        "x-mcp"
+      ],
+      "env": {
+        "TWITTER_API_KEY": "your_api_key",
+        "TWITTER_API_SECRET": "your_api_secret",
+        "TWITTER_ACCESS_TOKEN": "your_access_token",
+        "TWITTER_ACCESS_TOKEN_SECRET": "your_access_token_secret",
+        "TWITTER_BEARER_TOKEN": "your_bearer_token"
+      }
+    }
+  }
+}
 ```
 
-4. **Update the config file:**
-   - Replace `/path/to/x-mcp` with your actual repository path
-   - Add your X/Twitter API credentials
+#### 3. Get X/Twitter API Credentials
+
+1. **Visit X API Developer Portal:**
+   - Go to [X API Developer Portal](https://developer.x.com/en/products/x-api)
+   - Create a developer account (if you don't have one)
+
+2. **Create Project and App:**
+   - Create a new project
+   - Create an app within the project
+
+3. **Configure App Permissions:**
+   - In User Authentication Settings: Set to **Read and Write permissions**
+   - App type: Select **Web App**
+   - Callback URL: Set to `http://localhost/`
+   - Website URL: Set to `http://example.com/`
+
+4. **Generate API Keys and Tokens:**
+   - From the "Keys and Tokens" section, generate:
+     - API Key (Consumer Key)
+     - API Secret (Consumer Secret)
+     - Access Token
+     - Access Token Secret
+     - Bearer Token (recommended for dual authentication)
+
+#### 4. Update Configuration and Start
+
+**Update the config file:**
+- Replace `/path/to/x-mcp` with your actual project path (e.g., `/Users/yourname/x-mcp`)
+- Replace all `your_*` placeholders with your actual API credentials
+
+**Start Gemini CLI:**
+```bash
+# Start Gemini CLI with MCP support
+gemini-cli
+
+# Or if you need to specify config file path:
+gemini-cli --config ~/.gemini/settings.json
+```
+
+#### 5. Verify Installation
+
+Test the connection in Gemini CLI:
+```
+test api connection
+```
+
+If everything is configured correctly, you should see successful connection test results.
 
 ## Advanced Configuration
 
@@ -248,6 +473,48 @@ Works with both Claude code and Gemini CLI:
 * "Get information for tweets 123456789, 987654321, 555666777"
 
 ## Troubleshooting
+
+### Environment Setup Issues
+
+**UV not found or installation failed:**
+```bash
+# Check if UV is properly installed
+which uv
+uv --version
+
+# If not found, reinstall
+pip uninstall uv
+brew install uv  # macOS
+# or
+pip install uv   # other systems
+```
+
+**Virtual environment issues:**
+```bash
+# Delete existing virtual environment
+rm -rf .venv
+
+# Recreate (choose one method):
+
+# Method 1: Automatic creation and installation (recommended)
+uv sync
+
+# Method 2: Manual creation and installation
+uv venv
+source .venv/bin/activate  # macOS/Linux or .venv\Scripts\activate (Windows)
+uv pip sync pyproject.toml
+```
+
+**Python version incompatibility:**
+```bash
+# Check Python version (requires 3.8+)
+python --version
+python3 --version
+
+# If version is too old, upgrade Python
+brew install python@3.11  # macOS
+# or use your system package manager to upgrade
+```
 
 ### Basic Issues
 If not working:
